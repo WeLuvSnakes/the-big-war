@@ -25,7 +25,7 @@
 | Grid lookups and hex maths | `game-engine/world-tile/world-tile.service` |
 | Seeded randomness in rules (never `Math.random`) | `game-engine/rng/rng.service` |
 | A UI value that follows game state | `live(() => ...)` in `game/store/store.service.ts` |
-| A sound or music change | `audio` in `audio/audio.service.ts`; recipes in `audio/sfx.ts`, score in `audio/soundtrack.ts`, piano in `audio/piano.ts` |
+| A sound or music change | `audio` in `audio/audio.service.ts`; recipes in `audio/sfx.ts`, score in `audio/soundtrack.ts`, piano in `audio/piano.ts`, DJ filter moves in `audio/dj-filter.ts` |
 | An animation loop | `createFrameLoop` in `frontend/session/frame-loop` |
 | Window listeners and click-outside | `frontend/ui/hooks/hooks` |
 | Signed numbers, rates, clocks, class lists | `frontend/ui/format/format` |

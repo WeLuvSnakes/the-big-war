@@ -1,8 +1,7 @@
-import { midiToHz } from './soundtrack';
+import { midiToHz, sourness } from './soundtrack';
 
 const LOW_MIDI = 30;
 const HIGH_MIDI = 96;
-const SOURNESS_SEMITONES = 0.18;
 const UNISON_RATIO = 1.0016;
 const LOW_DAMPING = 0.55;
 const HIGH_DAMPING = 0.95;
@@ -18,8 +17,6 @@ const ATTACK_SECONDS = 0.1;
 const ATTACK_LOUDNESS = 0.3;
 
 const registerOf = (midi: number): number => Math.min(1, Math.max(0, (midi - LOW_MIDI) / (HIGH_MIDI - LOW_MIDI)));
-
-export const sourness = (midi: number): number => Math.sin(midi * 12.9898) * SOURNESS_SEMITONES;
 
 function strike(length: number, random: () => number): Float32Array {
   const felt = new Float32Array(length);

@@ -27,6 +27,7 @@ export interface ScoreNote {
   readonly beats: number;
   readonly midi: number;
   readonly velocity: number;
+  readonly cents?: number;
 }
 
 export type ScoreLine = readonly (readonly [beat: number, beats: number, midi: number])[];
@@ -36,13 +37,21 @@ export interface ScoreBar {
   readonly arpeggio?: readonly number[];
   readonly line?: ScoreLine;
   readonly sun?: readonly number[];
+  readonly bounce?: number;
   readonly hammered?: boolean;
   readonly drag?: number;
+}
+
+export interface SweepMove {
+  readonly beat: number;
+  readonly beats: number;
+  readonly position: number;
 }
 
 export interface MoodScore {
   readonly bpm: number;
   readonly dynamics: number;
+  readonly sweepDepth: number;
   readonly timpaniBeats: readonly number[];
   readonly form: readonly ScoreBar[];
 }

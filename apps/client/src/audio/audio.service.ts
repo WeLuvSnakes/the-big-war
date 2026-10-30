@@ -1,6 +1,7 @@
 import { renderPianoNote } from './piano';
 import { SFX, type SfxTarget } from './sfx';
 import { createRoot, createSignal } from 'solid-js';
+import { composeSweep, djCutoffs } from './dj-filter';
 import type { Mood, ScoreNote, SoundId } from './audio.types';
 import { barSeconds, composeBar, midiToHz, nextBar } from './soundtrack';
 
@@ -35,6 +36,9 @@ const DRONE_LEVEL = 0.09;
 const DRONE_FILTER_HZ = 240;
 const BREATH_HZ = 0.06;
 const BREATH_DEPTH = 0.03;
+const DJ_RESONANCE = 6;
+const STEREO_CHANNELS = 2;
+const KNOB_SETTLE = 3;
 
 const MIN_GAP_SECONDS: Partial<Record<SoundId, number>> = {
   click: 0.03,
@@ -86,6 +90,30 @@ const createCavern = (context: AudioContext): AudioBuffer => {
   return buffer;
 };
 
+interface DjChannel {
+  readonly lowpass: BiquadFilterNode;
+  readonly highpass: BiquadFilterNode;
+}
+
+const createDjChannel = (context: AudioContext): DjChannel => {
+  const lowpass = context.createBiquadFilter();
+  lowpass.type = 'lowpass';
+  const highpass = context.createBiquadFilter();
+  highpass.type = 'highpass';
+  const { lowpass: lowHz, highpass: highHz } = djCutoffs(0.5);
+  lowpass.frequency.value = lowHz;
+  highpass.frequency.value = highHz;
+  lowpass.Q.value = highpass.Q.value = DJ_RESONANCE;
+  lowpass.connect(highpass);
+  return { lowpass, highpass };
+};
+
+const turnKnob = ({ lowpass, highpass }: DjChannel, position: number, at: number, seconds: number): void => {
+  const cutoffs = djCutoffs(position);
+  lowpass.frequency.setTargetAtTime(cutoffs.lowpass, at, seconds / KNOB_SETTLE);
+  highpass.frequency.setTargetAtTime(cutoffs.highpass, at, seconds / KNOB_SETTLE);
+};
+
 function createAudio() {
   const [musicOn, setMusicOn] = createRoot(() => createSignal(loadEnabled(MUSIC_KEY)));
   const [sfxOn, setSfxOn] = createRoot(() => createSignal(loadEnabled(SFX_KEY)));
@@ -95,6 +123,7 @@ function createAudio() {
   let voiceBus: GainNode | null = null;
   let cavern: ConvolverNode | null = null;
   let warble: GainNode | null = null;
+  let djChannels: readonly [DjChannel, DjChannel] | null = null;
   let sfxTarget: SfxTarget | null = null;
   let mood: Mood = 'menu';
   let ducked = false;
@@ -130,6 +159,7 @@ function createAudio() {
     felt.frequency.value = PIANO_DULL_HZ + note.velocity * PIANO_BRIGHT_HZ;
     const source = ctx.createBufferSource();
     source.buffer = pianoNote(ctx, note.midi);
+    source.detune.value = note.cents ?? 0;
     if (warble) warble.connect(source.detune);
     source.connect(felt).connect(gain).connect(bus);
     source.start(at);
@@ -148,6 +178,7 @@ function createAudio() {
     const oscillator = ctx.createOscillator();
     oscillator.type = 'triangle';
     oscillator.frequency.value = midiToHz(note.midi);
+    oscillator.detune.value = note.cents ?? 0;
     if (warble) warble.connect(oscillator.detune);
     oscillator.connect(haze).connect(gain).connect(bus);
     oscillator.start(at);
@@ -181,6 +212,13 @@ function createAudio() {
         if (note.voice === 'sun') playSun(context, cavern, note, at, noteSeconds);
         if (note.voice === 'timpani') playTimpani(context, voiceBus, note, at, noteSeconds);
       }
+      for (const move of composeSweep(mood, bar, Math.random)) {
+        const at = nextBarAt + move.beat * beatSeconds;
+        const moveSeconds = move.beats * beatSeconds;
+        if (!djChannels) continue;
+        turnKnob(djChannels[0], move.position, at, moveSeconds);
+        turnKnob(djChannels[1], 1 - move.position, at, moveSeconds);
+      }
       bar = nextBar(mood, bar, Math.random);
       nextBarAt += seconds * (1 + (Math.random() - 0.5) * BAR_LURCH);
     }
@@ -195,13 +233,25 @@ function createAudio() {
     musicBus = context.createGain();
     musicBus.gain.value = 0;
     musicBus.connect(limiter);
+    const rack = context.createGain();
+    rack.channelCount = STEREO_CHANNELS;
+    rack.channelCountMode = 'explicit';
+    const splitter = context.createChannelSplitter(STEREO_CHANNELS);
+    const merger = context.createChannelMerger(STEREO_CHANNELS);
+    rack.connect(splitter);
+    djChannels = [createDjChannel(context), createDjChannel(context)];
+    djChannels.forEach((channel, index) => {
+      splitter.connect(channel.lowpass, index);
+      channel.highpass.connect(merger, 0, index);
+    });
+    merger.connect(musicBus);
     voiceBus = context.createGain();
-    voiceBus.connect(musicBus);
+    voiceBus.connect(rack);
     cavern = context.createConvolver();
     cavern.buffer = createCavern(context);
     const cavernLevel = context.createGain();
     cavernLevel.gain.value = CAVERN_LEVEL;
-    voiceBus.connect(cavern).connect(cavernLevel).connect(musicBus);
+    voiceBus.connect(cavern).connect(cavernLevel).connect(rack);
     const warbleLfo = context.createOscillator();
     warbleLfo.frequency.value = WARBLE_HZ;
     warble = context.createGain();
@@ -213,7 +263,7 @@ function createAudio() {
     const earth = context.createBiquadFilter();
     earth.type = 'lowpass';
     earth.frequency.value = DRONE_FILTER_HZ;
-    earth.connect(drone).connect(musicBus);
+    earth.connect(drone).connect(rack);
     for (const ratio of [1, DRONE_DETUNE, 2]) {
       const string = context.createOscillator();
       string.type = 'triangle';

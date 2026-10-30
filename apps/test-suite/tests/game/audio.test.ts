@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { renderPianoNote } from '../../../client/src/audio/piano';
 import { diffSounds } from '../../../client/src/audio/match-audio';
 import type { MatchSnapshot } from '../../../client/src/audio/audio.types';
-import { renderPianoNote, sourness } from '../../../client/src/audio/piano';
-import { barSeconds, composeBar, midiToHz, MOOD_SCORES, nextBar } from '../../../client/src/audio/soundtrack';
+import { composeSweep, djCutoffs } from '../../../client/src/audio/dj-filter';
+import { barSeconds, composeBar, harmonicCents, midiToHz, MOOD_SCORES, nextBar, sourness } from '../../../client/src/audio/soundtrack';
 
 const snapshot = (patch: Partial<MatchSnapshot> = {}): MatchSnapshot => ({
   hexes: 10,
@@ -90,26 +91,96 @@ describe('composeBar', () => {
     expect(notes.every(note => note.velocity === 1)).toBe(true);
   });
 
-  test('the knock stops dead before agartha', () => {
-    expect(composeBar('peace', 18, () => 0.5)).toEqual([]);
+  test('the knock falls apart like a bouncing ball, then stops dead', () => {
+    const beats = [...new Set(pianoBars('peace', 18).map(note => note.beat))];
+    const gaps = beats.slice(1).map((beat, index) => beat - beats[index]!);
+    expect(gaps.length).toBeGreaterThan(8);
+    gaps.forEach((gap, index) => index && expect(gap).toBeLessThan(gaps[index - 1]!));
+    const hits = pianoBars('peace', 18);
+    expect(hits.at(-1)!.velocity).toBeLessThan(hits[0]!.velocity);
+    expect(composeBar('peace', 19, () => 0.5)).toEqual([]);
   });
 
   test('agartha turns the ode major over a sun heard only in the distance', () => {
-    expect(melody('peace', 20)).toEqual([90, 90, 91, 93]);
-    const voices = composeBar('peace', 20, () => 0.5).map(note => note.voice);
+    expect(melody('peace', 21)).toEqual([90, 90, 91, 93]);
+    const voices = composeBar('peace', 21, () => 0.5).map(note => note.voice);
     expect(voices).toContain('sun');
-    expect(MOOD_SCORES.peace.form[20]?.bass).toBeUndefined();
+    expect(MOOD_SCORES.peace.form[21]?.bass).toBeUndefined();
+  });
+
+  test('agartha leaves twelve-tone tuning for the harmonic series, undoing the sour keys', () => {
+    expect([harmonicCents(62), harmonicCents(66), harmonicCents(67), harmonicCents(69)]).toEqual([0, -14, 51, 2]);
+    const notes = composeBar('peace', 21, () => 0.5);
+    const fourth = notes.find(note => note.voice === 'piano' && note.midi === 91)!;
+    expect(fourth.cents).toBeCloseTo(51 - sourness(91) * 100, 5);
+    const sun = notes.find(note => note.voice === 'sun' && note.midi === 78)!;
+    expect(sun.cents).toBe(-14);
+  });
+
+  test('a slam hands the bar to a sober machine that plays what no hand could', () => {
+    const notes = composeBar('peace', 0, () => 0);
+    const slammed = notes.filter(note => note.velocity === 1);
+    expect(slammed.length).toBeGreaterThan(3);
+    const run = notes.filter(note => note.cents !== undefined);
+    expect(run.length).toBeGreaterThan(60);
+    const gaps = run.slice(1).map((note, index) => note.beat - run[index]!.beat);
+    gaps.forEach(gap => expect(gap).toBeCloseTo(1 / 24, 5));
+    run.forEach(note => expect(note.cents).toBeCloseTo(-sourness(note.midi) * 100, 5));
+    expect(notes.every(note => note.cents !== undefined || note.velocity === 1)).toBe(true);
   });
 
   test('only war has timpani', () => {
-    expect(composeBar('war', 4, () => 0.5).some(note => note.voice === 'timpani')).toBe(true);
+    expect(composeBar('war', 5, () => 0.5).some(note => note.voice === 'timpani')).toBe(true);
     expect(composeBar('peace', 8, () => 0.5).some(note => note.voice === 'timpani')).toBe(false);
   });
 
-  test('a drunk hand can slip a semitone and slam the keys', () => {
+  test('a drunk hand can slip a semitone', () => {
     const slipped = composeBar('peace', 8, () => 0.1).filter(note => note.voice === 'piano' && note.beats === 0.14);
     expect(slipped.length).toBeGreaterThan(0);
-    expect(composeBar('peace', 0, () => 0.01).some(note => note.velocity === 1)).toBe(true);
+  });
+});
+
+describe('dj filter', () => {
+  test('one knob: lowpass below centre, flat at centre, highpass above', () => {
+    expect(djCutoffs(0)).toEqual({ lowpass: 150, highpass: 20 });
+    expect(djCutoffs(0.5)).toEqual({ lowpass: 20000, highpass: 20 });
+    expect(djCutoffs(1)).toEqual({ lowpass: 20000, highpass: 6000 });
+  });
+
+  test('the knob stays on the dial in every mood', () => {
+    for (const mood of Object.keys(MOOD_SCORES) as (keyof typeof MOOD_SCORES)[]) {
+      const random = seeded();
+      for (let bar = 0; bar < MOOD_SCORES[mood].form.length * 6; bar++) {
+        for (const move of composeSweep(mood, bar, random)) {
+          expect(move.position).toBeGreaterThanOrEqual(0);
+          expect(move.position).toBeLessThanOrEqual(1);
+          expect(move.beat).toBeLessThan(4);
+        }
+      }
+    }
+  });
+
+  test('each fate knock throws the sound to the other ear', () => {
+    const moves = composeSweep('war', 0, () => 0.5);
+    expect(moves.map(move => move.beat)).toEqual([0.5, 1, 1.5, 2]);
+    moves.slice(1).forEach((move, index) => expect(move.position > 0.5).not.toBe(moves[index]!.position > 0.5));
+  });
+
+  test('the bouncing ball tears the ears apart, and the silence holds there', () => {
+    expect(composeSweep('peace', 18, () => 0.5).at(-1)?.position).toBe(1);
+    expect(composeSweep('peace', 19, () => 0.5)).toEqual([]);
+  });
+
+  test('agartha is the only comfort: the knob comes home and stays there', () => {
+    for (let bar = 20; bar < 29; bar++) {
+      expect(composeSweep('peace', bar, () => 0).every(move => move.position === 0.5)).toBe(true);
+    }
+  });
+
+  test('sometimes the rug is pulled to the far side and put back', () => {
+    const moves = composeSweep('peace', 0, () => 0);
+    expect(moves.some(move => move.position === 1 || move.position === 0)).toBe(true);
+    expect(composeSweep('peace', 0, () => 0.9).some(move => move.position === 1 || move.position === 0)).toBe(false);
   });
 });
 
