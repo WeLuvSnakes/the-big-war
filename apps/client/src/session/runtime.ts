@@ -4,13 +4,13 @@ import type { Camera } from '../render/world.types';
 import { panBy } from '@the-big-war/frontend/session/camera';
 import { placementError } from '../game/building/building.service';
 import type { MatchRuntime, MatchRuntimeOptions } from './runtime.types';
+import { createFrameLoop } from '@the-big-war/frontend/session/frame-loop';
 import { attachInput, type InputIntent } from '@the-big-war/frontend/session/input';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { axialToPixel, gridInBounds } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 export type * from './runtime.types';
 
-const MAX_FRAME_SECONDS = 0.1;
 
 const clampAxis = (value: number, mapExtent: number, viewExtent: number): number => {
   const overflow = mapExtent - viewExtent;
@@ -125,15 +125,9 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
   };
 
   let detach: (() => void) | null = null;
-  let frame = 0;
-  let lastTime = 0;
   let endedNotified = false;
 
-  const loop = (time: number) => {
-    frame = requestAnimationFrame(loop);
-    const dt = lastTime === 0 ? 0 : Math.min(MAX_FRAME_SECONDS, (time - lastTime) / 1000);
-    lastTime = time;
-
+  const loop = createFrameLoop(dt => {
     store.step(dt);
 
     const tool = controllers.tool();
@@ -160,21 +154,19 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
       endedNotified = true;
       options.onEnded?.(store.winner());
     }
-  };
+  });
 
   return {
     controllers,
     cameraMoved,
     start(): void {
       detach = attachInput({ element: host, viewport: () => ({ x: world.size.width, y: world.size.height }), onIntent: handleIntent });
-      lastTime = 0;
       endedNotified = false;
       world.render(store.state);
-      frame = requestAnimationFrame(loop);
+      loop.start();
     },
     stop(): void {
-      if (frame) cancelAnimationFrame(frame);
-      frame = 0;
+      loop.stop();
       detach?.();
       detach = null;
     },

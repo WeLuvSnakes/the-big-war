@@ -3,6 +3,7 @@ import { assignNationColors } from '../render/nation-colors';
 import { FACTIONS } from '../game/faction/faction.constants';
 import { createGameStore } from '../game/store/store.service';
 import { createInitialState } from '../game/state/setup.service';
+import { createFrameLoop } from '@the-big-war/frontend/session/frame-loop';
 import type { AttractMode, AttractOptions, AttractSequence } from './attract.types';
 
 export type * from './attract.types';
@@ -10,7 +11,6 @@ export type * from './attract.types';
 const rivals = (count: number): string[] =>
   Array.from({ length: count }, (_, i) => FACTIONS[(i + 1) % FACTIONS.length]!.id);
 
-const MAX_FRAME_SECONDS = 0.1;
 const DRIFT_PERIOD_SECONDS = 70;
 
 export const ATTRACT_SEQUENCES: readonly AttractSequence[] = [
@@ -50,8 +50,6 @@ export function createAttractMode(options: AttractOptions): AttractMode {
 
   let index = -1;
   let elapsed = 0;
-  let frame = 0;
-  let lastTime = 0;
   let baseScale = 1;
 
   const mapExtent = () => {
@@ -85,29 +83,24 @@ export function createAttractMode(options: AttractOptions): AttractMode {
     });
   };
 
-  const loop = (time: number): void => {
-    frame = requestAnimationFrame(loop);
-    const dt = lastTime === 0 ? 0 : Math.min(MAX_FRAME_SECONDS, (time - lastTime) / 1000);
-    lastTime = time;
+  const loop = createFrameLoop(dt => {
     elapsed += dt;
     if (elapsed >= sequences[index]!.seconds || store.status() === 'ended') next();
     store.step(dt);
     drift();
     world.render(store.state);
-  };
+  });
 
   return {
     start(): void {
-      if (frame) return;
+      if (loop.running()) return;
       index = -1;
-      lastTime = 0;
       world.setOverlay({ selected: null, hovered: null, ghost: null, cannonFrom: null, cannonTarget: null });
       next();
-      frame = requestAnimationFrame(loop);
+      loop.start();
     },
     stop(): void {
-      if (frame) cancelAnimationFrame(frame);
-      frame = 0;
+      loop.stop();
     },
   };
 }
