@@ -3,9 +3,9 @@ import { buildingLabel } from '../text';
 import { buildingGlyph } from './building-glyph';
 import type { HotbarProps } from './Hotbar.types';
 import { createSignal, For, Show } from 'solid-js';
-import { gameStore } from '../../game/store/store.service';
 import { useEvent } from '@the-big-war/frontend/ui/hooks/hooks';
 import { classes } from '@the-big-war/frontend/ui/format/format';
+import { gameStore, live } from '../../game/store/store.service';
 import { hasUnlock } from '../../game/research/research.service';
 import { FaInfoCircle } from '@the-big-war/frontend/ui/icons/icons';
 import { placementError } from '../../game/building/building.service';
@@ -19,7 +19,7 @@ const DRAG_THRESHOLD = 6;
 
 export const Hotbar = (props: HotbarProps) => {
   const store = gameStore();
-  const me = () => store.state.empires[store.state.playerEmpire]!;
+  const me = live(() => store.state.empires[store.state.playerEmpire]!);
 
   const cost = (kind: BuildingKind): number =>
     resolveModifier(store.state.config.buildings[kind].cost, me().bonuses.buildCost);
