@@ -129,6 +129,30 @@ describe('composeBar', () => {
     expect(notes.every(note => note.cents !== undefined || note.velocity === 1)).toBe(true);
   });
 
+  test('the beat drops in under the ode, never under the opening moonlight', () => {
+    const voices = (bar: number) => composeBar('peace', bar, () => 0.5).map(note => note.voice);
+    expect(voices(0)).not.toContain('kick');
+    for (const voice of ['kick', 'snare', 'hat', 'sub'] as const) expect(voices(8)).toContain(voice);
+  });
+
+  test('the snare drags behind the beat and the sub follows the harmony', () => {
+    const notes = composeBar('peace', 9, () => 0.5);
+    const snares = notes.filter(note => note.voice === 'snare').map(note => note.beat);
+    expect(snares).toEqual([1.05, 3.05]);
+    expect(notes.find(note => note.voice === 'sub')?.midi).toBe(32);
+  });
+
+  test('agartha keeps only a heartbeat', () => {
+    const drums = composeBar('peace', 21, () => 0.5).filter(note => ['kick', 'snare', 'hat', 'sub'].includes(note.voice));
+    expect(drums.map(note => note.voice)).toEqual(['kick', 'kick']);
+  });
+
+  test('the machine stops the beat dead', () => {
+    const notes = composeBar('peace', 8, () => 0);
+    expect(notes.some(note => note.voice === 'kick' || note.voice === 'sub')).toBe(false);
+    expect(notes.some(note => note.cents !== undefined)).toBe(true);
+  });
+
   test('only war has timpani', () => {
     expect(composeBar('war', 5, () => 0.5).some(note => note.voice === 'timpani')).toBe(true);
     expect(composeBar('peace', 8, () => 0.5).some(note => note.voice === 'timpani')).toBe(false);

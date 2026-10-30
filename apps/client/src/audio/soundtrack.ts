@@ -27,6 +27,15 @@ const MACHINE_OCTAVES = [-12, 0, 12, 24] as const;
 const BOUNCE_FIRST_GAP_BEATS = 0.75;
 const BOUNCE_DECAY = 0.82;
 const BOUNCE_MIN_GAP_BEATS = 0.03;
+const KICK_BEATS = [0, 1.75, 2.5] as const;
+const SNARE_BEATS = [1, 3] as const;
+const BEHIND_THE_BEAT = 0.05;
+const HAT_STEP_BEATS = 0.5;
+const HAT_SWING_BEATS = 0.09;
+const HAT_GHOST_VELOCITY = 0.45;
+const SUB_PATTERN = [[0, 1.5, 0], [2.5, 0.5, 0], [3, 0.75, 7]] as const;
+const HEART_BEATS = [[0, 0.8], [0.45, 0.5]] as const;
+const HEART_DECAY_BEATS = 0.6;
 const SOURNESS_SEMITONES = 0.18;
 const HARMONIC_TONIC = 2;
 const HARMONIC_CENTS = [0, 5, 4, -2, -14, 51, 28, 2, 41, 6, -31, -12] as const;
@@ -59,6 +68,8 @@ const fate = (short: number, long: number): ScoreBar => ({
 
 const VIGIL: ScoreLine = [[0, 2.75, 68], [2.75, 0.25, 68], [3, 1, 68]];
 
+const grooving = (bars: readonly ScoreBar[]): readonly ScoreBar[] => bars.map(bar => ({ ...bar, groove: true }));
+
 const MOONLIGHT: readonly ScoreBar[] = [
   TONIC,
   TONIC_OVER_B,
@@ -72,7 +83,7 @@ const MOONLIGHT: readonly ScoreBar[] = [
 
 const [RISE, FALL_BACK, ROOT, HALF_CADENCE, HOME] = ode(73, 75, 76, 78, 80) as [ScoreLine, ScoreLine, ScoreLine, ScoreLine, ScoreLine];
 
-const ODE: readonly ScoreBar[] = [
+const ODE: readonly ScoreBar[] = grooving([
   { ...TONIC, line: RISE },
   { ...DOMINANT, line: FALL_BACK },
   { ...TONIC, line: ROOT },
@@ -81,7 +92,7 @@ const ODE: readonly ScoreBar[] = [
   { ...DOMINANT, line: FALL_BACK },
   { ...TONIC, line: ROOT },
   { ...TONIC, line: HOME, drag: FINAL_DRAG },
-];
+]);
 
 const FATE: readonly ScoreBar[] = [
   fate(68, 64),
@@ -106,12 +117,12 @@ const AGARTHA: readonly ScoreBar[] = [
   { line: SUN_HOME, sun: SUN_TONIC, drag: FINAL_DRAG },
 ];
 
-const FALL: readonly ScoreBar[] = [
+const FALL: readonly ScoreBar[] = grooving([
   { ...NEAPOLITAN, line: [[0, 2, 74], [2, 2, 73]] },
   { ...TONIC, line: [[0, 2, 69], [2, 2, 68]] },
   { ...DOMINANT_OVER_B_SHARP, line: [[0, 2, 66], [2, 2, 64]] },
   { ...DOMINANT, line: VIGIL, drag: FINAL_DRAG },
-];
+]);
 
 export const MOOD_SCORES: Readonly<Record<Mood, MoodScore>> = {
   menu: { bpm: 46, dynamics: 0.6, sweepDepth: 0.2, timpaniBeats: [], form: [...MOONLIGHT, ...AGARTHA, ...FALL] },
@@ -181,6 +192,25 @@ function drunkenLine(line: ScoreLine, dynamics: number, random: () => number): S
 const hammeredLine = (line: ScoreLine): ScoreNote[] =>
   line.flatMap(([beat, beats, midi]) => [0, OCTAVE, 2 * OCTAVE].map(drop => piano(beat, beats, midi - drop, 1)));
 
+function tripHop(root: number, dynamics: number): ScoreNote[] {
+  const notes: ScoreNote[] = [];
+  for (const beat of KICK_BEATS) notes.push({ voice: 'kick', beat, beats: 1, midi: 0, velocity: dynamics });
+  for (const beat of SNARE_BEATS) {
+    notes.push({ voice: 'snare', beat: beat + BEHIND_THE_BEAT, beats: 0.5, midi: 0, velocity: dynamics });
+  }
+  for (let step = 0; step * HAT_STEP_BEATS < BEATS_PER_BAR; step++) {
+    const beat = step * HAT_STEP_BEATS + (step % 2 ? HAT_SWING_BEATS : 0);
+    notes.push({ voice: 'hat', beat, beats: 0.12, midi: 0, velocity: step % 2 ? dynamics * HAT_GHOST_VELOCITY : dynamics });
+  }
+  for (const [beat, beats, interval] of SUB_PATTERN) {
+    notes.push({ voice: 'sub', beat, beats, midi: root + interval, velocity: 1 });
+  }
+  return notes;
+}
+
+const heartbeat = (): ScoreNote[] =>
+  HEART_BEATS.map(([beat, velocity]) => ({ voice: 'kick', beat, beats: HEART_DECAY_BEATS, midi: 0, velocity }));
+
 function bouncingBall(midi: number): ScoreNote[] {
   const notes: ScoreNote[] = [];
   let gap = BOUNCE_FIRST_GAP_BEATS;
@@ -214,13 +244,15 @@ const inHarmonics = (note: ScoreNote): ScoreNote => ({
 export function composeBar(mood: Mood, bar: number, random: () => number): readonly ScoreNote[] {
   const { dynamics, timpaniBeats } = MOOD_SCORES[mood];
   const current = scoreBar(mood, bar);
-  const { bass, arpeggio, line, sun, hammered, bounce } = current;
+  const { bass, arpeggio, line, sun, hammered, bounce, groove } = current;
   const notes: ScoreNote[] = [];
 
   for (const midi of bass ?? []) notes.push(piano(0, BEATS_PER_BAR, midi, BASS_VELOCITY * dynamics));
   if (arpeggio) notes.push(...moonlight(arpeggio, dynamics, random));
   if (line) notes.push(...(hammered ? hammeredLine(line) : drunkenLine(line, dynamics, random)));
   if (bounce) notes.push(...bouncingBall(bounce));
+  if (groove && bass) notes.push(...tripHop(bass[0]!, dynamics));
+  if (sun) notes.push(...heartbeat());
   for (const midi of sun ?? []) {
     notes.push({ voice: 'sun', beat: 0, beats: SUN_BEATS, midi, velocity: SUN_VELOCITY });
   }

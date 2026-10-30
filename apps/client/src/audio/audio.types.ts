@@ -19,7 +19,7 @@ export type SoundId =
 
 export type Mood = 'menu' | 'peace' | 'war' | 'aftermath';
 
-export type Voice = 'piano' | 'sun' | 'timpani';
+export type Voice = 'piano' | 'sun' | 'timpani' | 'kick' | 'snare' | 'hat' | 'sub';
 
 export interface ScoreNote {
   readonly voice: Voice;
@@ -38,6 +38,7 @@ export interface ScoreBar {
   readonly line?: ScoreLine;
   readonly sun?: readonly number[];
   readonly bounce?: number;
+  readonly groove?: boolean;
   readonly hammered?: boolean;
   readonly drag?: number;
 }

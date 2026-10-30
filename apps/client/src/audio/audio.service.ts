@@ -36,6 +36,29 @@ const DRONE_LEVEL = 0.09;
 const DRONE_FILTER_HZ = 240;
 const BREATH_HZ = 0.06;
 const BREATH_DEPTH = 0.03;
+const KICK_LEVEL = 0.7;
+const KICK_START_HZ = 110;
+const KICK_END_HZ = 44;
+const KICK_DROP_SECONDS = 0.09;
+const SNARE_LEVEL = 0.3;
+const SNARE_HZ = 1800;
+const HAT_LEVEL = 0.07;
+const HAT_HZ = 7000;
+const SUB_LEVEL = 0.4;
+const SUB_FILTER_HZ = 320;
+const SUB_FALL = 0.94;
+const SUB_RELEASE_SECONDS = 0.06;
+const DUB_BEATS = 0.75;
+const DUB_FEEDBACK = 0.58;
+const DUB_LOW_HZ = 300;
+const DUB_HIGH_HZ = 1800;
+const DUB_SEND = 0.5;
+const DUB_MAX_SECONDS = 2;
+const CRACKLE_SECONDS = 7;
+const CRACKLE_CHANCE = 0.00035;
+const CRACKLE_LEVEL = 0.05;
+const CRACKLE_DECAY = 0.86;
+const CRACKLE_HISS = 0.012;
 const DJ_RESONANCE = 6;
 const STEREO_CHANNELS = 2;
 const KNOB_SETTLE = 3;
@@ -90,6 +113,20 @@ const createCavern = (context: AudioContext): AudioBuffer => {
   return buffer;
 };
 
+const createCrackle = (context: AudioContext): AudioBuffer => {
+  const buffer = context.createBuffer(2, context.sampleRate * CRACKLE_SECONDS, context.sampleRate);
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const samples = buffer.getChannelData(channel);
+    let pop = 0;
+    for (let i = 0; i < samples.length; i++) {
+      if (Math.random() < CRACKLE_CHANCE) pop = (Math.random() < 0.5 ? -1 : 1) * Math.random();
+      pop *= CRACKLE_DECAY;
+      samples[i] = pop + (Math.random() - 0.5) * CRACKLE_HISS;
+    }
+  }
+  return buffer;
+};
+
 interface DjChannel {
   readonly lowpass: BiquadFilterNode;
   readonly highpass: BiquadFilterNode;
@@ -121,6 +158,9 @@ function createAudio() {
   let context: AudioContext | null = null;
   let musicBus: GainNode | null = null;
   let voiceBus: GainNode | null = null;
+  let drumBus: GainNode | null = null;
+  let dubSend: GainNode | null = null;
+  let dubDelay: DelayNode | null = null;
   let cavern: ConvolverNode | null = null;
   let warble: GainNode | null = null;
   let djChannels: readonly [DjChannel, DjChannel] | null = null;
@@ -199,18 +239,73 @@ function createAudio() {
     oscillator.stop(at + seconds);
   };
 
+  const playKick = (ctx: AudioContext, bus: AudioNode, note: ScoreNote, at: number, seconds: number): void => {
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(note.velocity * KICK_LEVEL, at);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + seconds);
+    const oscillator = ctx.createOscillator();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(KICK_START_HZ, at);
+    oscillator.frequency.exponentialRampToValueAtTime(KICK_END_HZ, at + KICK_DROP_SECONDS);
+    oscillator.connect(gain).connect(bus);
+    oscillator.start(at);
+    oscillator.stop(at + seconds);
+  };
+
+  const playNoise = (noise: AudioBuffer, bus: AudioNode, note: ScoreNote, at: number, seconds: number): GainNode => {
+    const { context: ctx } = bus;
+    const snare = note.voice === 'snare';
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(note.velocity * (snare ? SNARE_LEVEL : HAT_LEVEL), at);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + seconds);
+    const filter = ctx.createBiquadFilter();
+    filter.type = snare ? 'bandpass' : 'highpass';
+    filter.frequency.value = snare ? SNARE_HZ : HAT_HZ;
+    const source = ctx.createBufferSource();
+    source.buffer = noise;
+    source.loop = true;
+    source.connect(filter).connect(gain).connect(bus);
+    source.start(at, Math.random() * noise.duration);
+    source.stop(at + seconds);
+    return gain;
+  };
+
+  const playSub = (ctx: AudioContext, bus: AudioNode, note: ScoreNote, at: number, seconds: number): void => {
+    const hz = midiToHz(note.midi);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, at);
+    gain.gain.linearRampToValueAtTime(note.velocity * SUB_LEVEL, at + SUB_RELEASE_SECONDS);
+    gain.gain.setValueAtTime(note.velocity * SUB_LEVEL, at + seconds - SUB_RELEASE_SECONDS);
+    gain.gain.linearRampToValueAtTime(0.0001, at + seconds);
+    const warmth = ctx.createBiquadFilter();
+    warmth.type = 'lowpass';
+    warmth.frequency.value = SUB_FILTER_HZ;
+    const oscillator = ctx.createOscillator();
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(hz, at);
+    oscillator.frequency.exponentialRampToValueAtTime(hz * SUB_FALL, at + seconds);
+    oscillator.connect(warmth).connect(gain).connect(bus);
+    oscillator.start(at);
+    oscillator.stop(at + seconds);
+  };
+
   const schedule = (): void => {
-    if (!context || !voiceBus || !cavern || context.state !== 'running' || !musicOn()) return;
+    if (!context || !voiceBus || !cavern || !drumBus || !dubSend || !dubDelay || !sfxTarget || context.state !== 'running' || !musicOn()) return;
     nextBarAt = Math.max(nextBarAt, context.currentTime + LEAD_IN_SECONDS);
     while (nextBarAt < context.currentTime + LOOKAHEAD_SECONDS) {
       const seconds = barSeconds(mood, bar);
       const beatSeconds = seconds / BEATS_PER_BAR;
+      dubDelay.delayTime.setTargetAtTime(beatSeconds * DUB_BEATS, nextBarAt, FADE_SECONDS);
       for (const note of composeBar(mood, bar, Math.random)) {
         const at = nextBarAt + note.beat * beatSeconds;
         const noteSeconds = note.beats * beatSeconds;
         if (note.voice === 'piano') playPiano(context, voiceBus, note, at, noteSeconds);
         if (note.voice === 'sun') playSun(context, cavern, note, at, noteSeconds);
         if (note.voice === 'timpani') playTimpani(context, voiceBus, note, at, noteSeconds);
+        if (note.voice === 'kick') playKick(context, drumBus, note, at, noteSeconds);
+        if (note.voice === 'sub') playSub(context, drumBus, note, at, noteSeconds);
+        if (note.voice === 'hat') playNoise(sfxTarget.noise, drumBus, note, at, noteSeconds);
+        if (note.voice === 'snare') playNoise(sfxTarget.noise, drumBus, note, at, noteSeconds).connect(dubSend);
       }
       for (const move of composeSweep(mood, bar, Math.random)) {
         const at = nextBarAt + move.beat * beatSeconds;
@@ -247,6 +342,28 @@ function createAudio() {
     merger.connect(musicBus);
     voiceBus = context.createGain();
     voiceBus.connect(rack);
+    drumBus = context.createGain();
+    drumBus.connect(rack);
+    dubSend = context.createGain();
+    dubSend.gain.value = DUB_SEND;
+    dubDelay = context.createDelay(DUB_MAX_SECONDS);
+    const dubFeedback = context.createGain();
+    dubFeedback.gain.value = DUB_FEEDBACK;
+    const dubLow = context.createBiquadFilter();
+    dubLow.type = 'highpass';
+    dubLow.frequency.value = DUB_LOW_HZ;
+    const dubHigh = context.createBiquadFilter();
+    dubHigh.type = 'lowpass';
+    dubHigh.frequency.value = DUB_HIGH_HZ;
+    dubSend.connect(dubDelay).connect(dubLow).connect(dubHigh).connect(dubFeedback).connect(dubDelay);
+    dubHigh.connect(rack);
+    const crackle = context.createBufferSource();
+    crackle.buffer = createCrackle(context);
+    crackle.loop = true;
+    const crackleLevel = context.createGain();
+    crackleLevel.gain.value = CRACKLE_LEVEL;
+    crackle.connect(crackleLevel).connect(rack);
+    crackle.start();
     cavern = context.createConvolver();
     cavern.buffer = createCavern(context);
     const cavernLevel = context.createGain();
