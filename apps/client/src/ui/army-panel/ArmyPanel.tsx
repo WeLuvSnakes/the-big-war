@@ -37,12 +37,22 @@ export const ArmyPanel = (props: ArmyPanelProps) => {
   const missionCount = () => myOffensives().length + incoming().length;
   const retreatPenalty = () => Math.round(store.state.config.wave.retreatPenalty * 100);
 
-  const focus = (offensive: Offensive) => {
+  const focused = () => props.controllers.focusedOffensive();
+  const toggleFocus = (offensive: Offensive) => {
+    props.controllers.focusOffensive(focused() === offensive.id ? null : offensive.id);
+  };
+  const show = (offensive: Offensive) => {
     props.controllers.selectHex(offensive.head);
     props.onClose();
   };
+  const missionLabel = (offensive: Offensive): string => {
+    if (offensive.mission === 'hold') return 'Holding';
+    if (offensive.mission === 'retreat') return 'Retreating';
+    return `${takenBy(offensive)} tiles taken`;
+  };
 
   const recall = (offensive: Offensive) => {
+    if (focused() === offensive.id) props.controllers.focusOffensive(null);
     store.dispatch({ type: 'RecallOffensive', empire: player(), offensive: offensive.id });
   };
 
@@ -65,24 +75,33 @@ export const ArmyPanel = (props: ArmyPanelProps) => {
       >
         <For each={myOffensives()}>
           {offensive => (
-            <div class="kit-col army-node">
+            <div class="kit-col army-node" classList={{ 'army-focused': focused() === offensive.id }}>
               <div class="hud-card-head">
                 <span class="hud-card-swatch" style={{ background: swatch(offensive.target) }} />
-                <button type="button" class="army-front-name" title="Show on map" onClick={() => focus(offensive)}>
+                <button
+                  type="button"
+                  class="army-front-name"
+                  title="Focus, then click the map to order"
+                  aria-pressed={focused() === offensive.id}
+                  onClick={() => toggleFocus(offensive)}
+                >
                   {nameOf(offensive.target)}
                 </button>
                 <span class="army-troops kit-num">{troopsOf(offensive)}</span>
                 <button
                   type="button"
                   class="army-retreat"
-                  title={`Recall (lose ${retreatPenalty()}% of troops)`}
-                  aria-label={`Recall the attack on ${nameOf(offensive.target)}`}
+                  title={`Retreat to the nearest encampment (lose ${retreatPenalty()}% of troops)`}
+                  aria-label={`Retreat the group at ${nameOf(offensive.target)}`}
+                  disabled={offensive.mission === 'retreat'}
                   onClick={() => recall(offensive)}
                 >
-                  <FaTimes />
+                  <FaTimes /> Retreat
                 </button>
               </div>
-              <span class="army-sub">{takenBy(offensive)} tiles taken</span>
+              <span class="army-sub">
+                {focused() === offensive.id ? 'Click the map to move, hold or attack' : missionLabel(offensive)}
+              </span>
             </div>
           )}
         </For>
@@ -92,7 +111,7 @@ export const ArmyPanel = (props: ArmyPanelProps) => {
             <div class="kit-col army-node">
               <div class="hud-card-head">
                 <span class="hud-card-swatch" style={{ background: swatch(offensive.empire) }} />
-                <button type="button" class="army-front-name" title="Show on map" onClick={() => focus(offensive)}>
+                <button type="button" class="army-front-name" title="Show on map" onClick={() => show(offensive)}>
                   {nameOf(offensive.empire)} attacking
                 </button>
                 <span class="army-troops kit-num">{troopsOf(offensive)}</span>

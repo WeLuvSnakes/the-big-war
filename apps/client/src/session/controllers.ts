@@ -11,6 +11,7 @@ import { isNavigable } from '../game/ship/sea-route.service';
 import { shipById, shipsNear } from '../game/ship/ship.service';
 import type { BuildingKind } from '../game/building/building.types';
 import type { CommandError } from '../game/commands/commands.types';
+import type { OffensiveId } from '../game/offensive/offensive.types';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import type {
   CommandNotice,
@@ -33,6 +34,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
   const [tool, setToolSignal] = createSignal<Tool>({ kind: 'idle' });
   const [troopPercent, setTroopPercentSignal] = createSignal(50);
   const [selectedShip, setSelectedShip] = createSignal<ShipId | null>(null);
+  const [focusedOffensive, setFocusedOffensive] = createSignal<OffensiveId | null>(null);
   const [notices, setNotices] = createSignal<readonly CommandNotice[]>([]);
 
   const state = () => store.state;
@@ -75,6 +77,12 @@ export function createControllers(deps: ControllerDeps): Controllers {
     whenSettled(store.dispatch({ type: 'SendTroops', empire: player(), target, percent: troopPercent() }), result => {
       if (result.ok) deps.onTroopsSent?.(target);
       else notice(result.reason);
+    });
+  };
+
+  const orderOffensive = (offensive: OffensiveId, target: Axial) => {
+    whenSettled(store.dispatch({ type: 'OrderOffensive', empire: player(), offensive, target }), result => {
+      if (!result.ok) notice(result.reason);
     });
   };
 
@@ -138,6 +146,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
 
   const cancelTool = () => {
     if (tool().kind !== 'idle') setTool({ kind: 'idle' });
+    else if (focusedOffensive() !== null) setFocusedOffensive(null);
     else {
       setSelectedHex(null);
       setSelectedShip(null);
@@ -167,6 +176,15 @@ export function createControllers(deps: ControllerDeps): Controllers {
     if (active.kind === 'trench-attack') {
       trenchAttack(active.from, hex);
       return;
+    }
+
+    const focused = focusedOffensive();
+    if (focused !== null) {
+      if (state().offensives.some(item => item.id === focused && item.empire === player())) {
+        orderOffensive(focused, hex);
+        return;
+      }
+      setFocusedOffensive(null);
     }
 
     if (tapShip(hex)) return;
@@ -209,6 +227,8 @@ export function createControllers(deps: ControllerDeps): Controllers {
     troopPercent,
     notices,
     selectedShip,
+    focusedOffensive,
+    focusOffensive: setFocusedOffensive,
     selectHex,
     selectShip: setSelectedShip,
     setHover: setHoverHex,

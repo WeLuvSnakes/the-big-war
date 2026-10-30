@@ -3,6 +3,7 @@ import type { ShipId } from '../game/ship/ship.types';
 import type { ClientStore } from '../game/store/store.types';
 import type { BuildingKind } from '../game/building/building.types';
 import type { CommandError } from '../game/commands/commands.types';
+import type { OffensiveId } from '../game/offensive/offensive.types';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
 
 export type Tool =
@@ -23,9 +24,11 @@ export interface Controllers {
   readonly troopPercent: Accessor<number>;
   readonly notices: Accessor<readonly CommandNotice[]>;
   readonly selectedShip: Accessor<ShipId | null>;
+  readonly focusedOffensive: Accessor<OffensiveId | null>;
 
   selectHex(hex: Axial | null): void;
   selectShip(ship: ShipId | null): void;
+  focusOffensive(offensive: OffensiveId | null): void;
   setHover(hex: Axial | null): void;
   setTroopPercent(percent: number): void;
   setTool(tool: Tool): void;
