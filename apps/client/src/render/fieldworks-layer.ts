@@ -1,12 +1,12 @@
 import { Container, Graphics } from 'pixi.js';
 import type { HexRange } from './terrain-layer';
 import type { HexCell } from '../game/map/map.types';
-import type { BuildingId } from '../game/building/building.types';
 import type { PlacementGhost } from './overlay-layer.types';
+import type { BuildingId } from '../game/building/building.types';
 import type { TrenchSample, TrenchShape } from './trench-geometry';
-import { axialToPixel, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { trenchFront, trenchPaths, trenchSamples, trenchShape } from './trench-geometry';
 import type { AxialGrid, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
+import { axialToPixel, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import {
   GUN_METAL_COLOR,
   HEDGEHOG_COLOR,

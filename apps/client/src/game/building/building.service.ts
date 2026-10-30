@@ -1,11 +1,11 @@
 import type { HexCell } from '../map/map.types';
 import { ownTrench } from '../trench/trench.service';
 import type { GameState } from '../state/state.types';
-import { hasUnlock, isComplete } from '../research/research.service';
 import type { CommandError } from '../commands/commands.types';
-import type { BarracksTierConfig } from '../config/config.types';
 import type { Empire, EmpireId } from '../empire/empire.types';
+import type { BarracksTierConfig } from '../config/config.types';
 import { ENGINE_TUNING } from '../simulation/simulation.constants';
+import { hasUnlock, isComplete } from '../research/research.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
 import { area, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';

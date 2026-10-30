@@ -1,12 +1,12 @@
 import { ENGINE_TUNING } from '../simulation.constants';
 import type { GameState } from '../../state/state.types';
 import type { EmpireId } from '../../empire/empire.types';
+import { isMannedMachineGun } from '../../trench/trench.service';
 import { barracksTier, countSupport } from '../../building/building.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { area, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import { isMannedMachineGun } from '../../trench/trench.service';
 import type { FrontModifiersResult, FrontTickContext } from '../simulation.types';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
+import { area, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { terrainAt, terrainDefenceAt, terrainLabel } from '../../map/terrain.service';
 import type { Front, FrontSide, FrontSideKey, ModifierLine } from '../../front/front.types';
 
