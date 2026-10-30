@@ -6,12 +6,12 @@ import { ownerCss } from '../../render/theme';
 import { buildingLabel, terrainLabel } from '../text';
 import type { HexPanelProps } from './HexPanel.types';
 import { Bar } from '@the-big-war/frontend/ui/bar/Bar';
-import { gameStore } from '../../game/store/store.service';
 import { Panel } from '@the-big-war/frontend/ui/panel/Panel';
+import { gameStore, live } from '../../game/store/store.service';
 import type { ModifierLine } from '../../game/front/front.types';
 import type { Building } from '../../game/building/building.types';
-import { defendersOn, isMannedMachineGun } from '../../game/trench/trench.service';
 import { RESEARCH_BY_ID } from '../../game/research/research.constants';
+import { defendersOn, isMannedMachineGun } from '../../game/trench/trench.service';
 import { barracksTier, nextBarracksTier, upgradeError } from '../../game/building/building.service';
 import { distance, gridAt, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
@@ -49,11 +49,10 @@ export const HexPanel = (props: HexPanelProps) => {
   const [confirmDemolish, setConfirmDemolish] = createSignal(false);
 
   const hex = () => props.controllers.selectedHex();
-  const cell = () => {
-    store.version();
+  const cell = live(() => {
     const selected = hex();
     return selected ? (gridAt(store.state.grid, selected) ?? null) : null;
-  };
+  });
   const player = () => store.state.playerEmpire;
   const isOwn = () => cell()?.owner === player();
   const isForeign = () => {
@@ -91,24 +90,19 @@ export const HexPanel = (props: HexPanelProps) => {
     return !!current && current.kind === 'cannon' && isOwn() && current.cooldown <= 0;
   };
 
-  const liveBuilding = () => {
-    store.version();
-    return building();
-  };
+  const liveBuilding = live(() => building());
   const currentTier = () => {
     const current = liveBuilding();
     return current?.kind === 'barracks' ? barracksTier(store.state, current) : null;
   };
-  const nextTier = () => {
-    store.version();
+  const nextTier = live(() => {
     const current = building();
     return current && isOwn() && current.buildRemaining <= 0 ? nextBarracksTier(store.state, current) : null;
-  };
-  const upgradeBlocker = () => {
-    store.version();
+  });
+  const upgradeBlocker = live(() => {
     const selected = hex();
     return selected ? upgradeError(store.state, player(), selected) : null;
-  };
+  });
   const upgrade = () => {
     const selected = hex();
     if (!selected) return;

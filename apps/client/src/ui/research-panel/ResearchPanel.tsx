@@ -1,9 +1,10 @@
 import './ResearchPanel.css';
 import { createSignal, For, Show } from 'solid-js';
-import { gameStore } from '../../game/store/store.service';
 import { Panel } from '@the-big-war/frontend/ui/panel/Panel';
 import type { ResearchPanelProps } from './ResearchPanel.types';
+import { gameStore, live } from '../../game/store/store.service';
 import { RESEARCH_NODES } from '../../game/research/research.constants';
+import { signed, signedPercent } from '@the-big-war/frontend/ui/format/format';
 import type { Modifier, ModifierKey } from '../../game/modifier/modifier.types';
 import { isComplete, missingRequirements } from '../../game/research/research.service';
 import type { ResearchBranch, ResearchEffect, ResearchNode } from '../../game/research/research.types';
@@ -38,11 +39,8 @@ const MODIFIER_META: Record<ModifierKey, { readonly icon: typeof FaWallet; reado
 };
 
 function modifierValue(modifier: Modifier): string {
-  if (modifier.mul !== undefined) {
-    const delta = Math.round((modifier.mul - 1) * 100);
-    return `${delta >= 0 ? '+' : ''}${delta}%`;
-  }
-  if (modifier.add !== undefined) return `${modifier.add >= 0 ? '+' : ''}${modifier.add}`;
+  if (modifier.mul !== undefined) return signedPercent(Math.round((modifier.mul - 1) * 100));
+  if (modifier.add !== undefined) return signed(modifier.add);
   return '';
 }
 
@@ -115,10 +113,7 @@ export const ResearchPanel = (props: ResearchPanelProps) => {
       return next;
     });
 
-  const me = () => {
-    store.version();
-    return store.state.empires[store.state.playerEmpire]!;
-  };
+  const me = live(() => store.state.empires[store.state.playerEmpire]!);
   const research = () => me().research;
 
   const status = (node: ResearchNode): 'done' | 'active' | 'available' | 'locked' => {

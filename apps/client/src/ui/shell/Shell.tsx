@@ -13,11 +13,11 @@ import { WikiPanel } from '../wiki-panel/WikiPanel';
 import { BuildPanel } from '../build-panel/BuildPanel';
 import { MenuScreen } from '../menu-screen/MenuScreen';
 import { SmallScreen } from '../small-screen/SmallScreen';
-import { gameStore } from '../../game/store/store.service';
 import type { NoticesProps, PanelId } from './Shell.types';
 import { DeploySlider } from '../deploy-slider/DeploySlider';
 import { assignNationColors } from '../../render/nation-colors';
 import { ResearchPanel } from '../research-panel/ResearchPanel';
+import { gameStore, live } from '../../game/store/store.service';
 import { DiplomacyPanel } from '../diplomacy-panel/DiplomacyPanel';
 import { createWorld, type WorldRenderer } from '../../render/world';
 import { Rail, RailAction } from '@the-big-war/frontend/ui/rail/Rail';
@@ -114,10 +114,7 @@ export const Shell = () => {
   };
   const closePanel = (id: Exclude<PanelId, null>) => () => setPanel(current => (current === id ? null : current));
 
-  const pendingOfferCount = () => {
-    store.version();
-    return pendingOffersTo(store.state, store.state.playerEmpire).length;
-  };
+  const pendingOfferCount = live(() => pendingOffersTo(store.state, store.state.playerEmpire).length);
 
   const showingMatch = () => flow.screen() === 'match' || flow.screen() === 'end';
 

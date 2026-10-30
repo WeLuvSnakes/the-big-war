@@ -1,19 +1,16 @@
 import './DiplomacyPanel.css';
 import { For, Show } from 'solid-js';
-import { gameStore } from '../../game/store/store.service';
 import { Panel } from '@the-big-war/frontend/ui/panel/Panel';
 import type { Empire } from '../../game/empire/empire.types';
 import type { DiplomacyPanelProps } from './DiplomacyPanel.types';
+import { gameStore, live as tracked } from '../../game/store/store.service';
 import { getRelation, offerCooldown, pendingOffer, treatySecondsLeft } from '../../game/diplomacy/diplomacy.service';
 
 export type { DiplomacyPanelProps };
 
 export const DiplomacyPanel = (props: DiplomacyPanelProps) => {
   const store = gameStore();
-  const live = () => {
-    store.version();
-    return store.state;
-  };
+  const live = tracked(() => store.state);
   const player = () => live().playerEmpire;
   const others = () => live().empires.filter(empire => empire.id !== player() && empire.alive);
 

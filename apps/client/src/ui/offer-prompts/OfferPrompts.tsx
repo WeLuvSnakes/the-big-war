@@ -2,20 +2,17 @@ import './OfferPrompts.css';
 import { For } from 'solid-js';
 import { factionIcon } from '../text';
 import { ownerCss } from '../../render/theme';
-import { gameStore } from '../../game/store/store.service';
 import type { OfferPromptsProps } from './OfferPrompts.types';
 import { FaCheck, FaTimes } from '@the-big-war/frontend/ui/icons/icons';
 import { pendingOffersTo } from '../../game/diplomacy/diplomacy.service';
 import type { PendingOffer } from '../../game/diplomacy/diplomacy.types';
+import { gameStore, live as tracked } from '../../game/store/store.service';
 
 export type { OfferPromptsProps };
 
 export const OfferPrompts = (props: OfferPromptsProps) => {
   const store = gameStore();
-  const live = () => {
-    store.version();
-    return store.state;
-  };
+  const live = tracked(() => store.state);
   const offers = () => pendingOffersTo(live(), live().playerEmpire);
 
   const respond = (offer: PendingOffer, accept: boolean) => {

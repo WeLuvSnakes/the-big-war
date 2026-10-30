@@ -1,12 +1,13 @@
 import './MenuScreen.css';
-import { FactionSprite } from './FactionSprite';
 import { openAbout } from '../about/about';
+import { FactionSprite } from './FactionSprite';
 import { For, Show, createSignal } from 'solid-js';
 import { empireNames } from '../../game/names/names.service';
 import { FACTIONS } from '../../game/faction/faction.constants';
 import { isUnlimitedName } from '../../game/empire/empire.service';
 import type { FactionDef } from '../../game/faction/faction.types';
 import type { Modifier } from '../../game/modifier/modifier.types';
+import { signed, signedPercent } from '@the-big-war/frontend/ui/format/format';
 import type { MenuScreenProps, PickTarget, SegmentProps } from './MenuScreen.types';
 import { CHEAT_UNLIMITED_PERK, CHEAT_UNLIMITED_TITLE } from '../../game/empire/empire.constants';
 import { DIFFICULTY_ORDER, MAP_SIZE_ORDER, MAX_EMPIRES, MIN_EMPIRES, NEUTRAL_STATES_ORDER, type Difficulty, type MapSize, type NeutralStates } from '../../session/flow';
@@ -37,11 +38,8 @@ const MODIFIER_LABELS: Readonly<Record<string, string>> = {
 
 function bonusLine(modifier: Modifier): string {
   const name = MODIFIER_LABELS[modifier.key] ?? modifier.key;
-  if (modifier.mul !== undefined) {
-    const delta = Math.round((modifier.mul - 1) * 100);
-    return `${delta >= 0 ? '+' : ''}${delta}% ${name}`;
-  }
-  if (modifier.add !== undefined) return `${modifier.add >= 0 ? '+' : ''}${modifier.add} ${name}`;
+  if (modifier.mul !== undefined) return `${signedPercent(Math.round((modifier.mul - 1) * 100))} ${name}`;
+  if (modifier.add !== undefined) return `${signed(modifier.add)} ${name}`;
   return name;
 }
 

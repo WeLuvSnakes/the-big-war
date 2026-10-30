@@ -1,16 +1,16 @@
 import './Hud.css';
 import type { HudProps } from './Hud.types';
 import { ownerCss } from '../../render/theme';
-import { gameStore } from '../../game/store/store.service';
+import { createSignal, For, Show } from 'solid-js';
 import { OfferPrompts } from '../offer-prompts/OfferPrompts';
 import type { GameSpeed } from '../../game/config/config.types';
+import { gameStore, live } from '../../game/store/store.service';
+import { perSecond } from '@the-big-war/frontend/ui/format/format';
 import { hasUnlimitedResources } from '../../game/empire/empire.service';
-import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
+import { useOutsidePointer } from '@the-big-war/frontend/ui/hooks/hooks';
 import { FaAtom, FaUsers, GiCoin, GiCrossedSwords } from '@the-big-war/frontend/ui/icons/icons';
 
 const SPEEDS: readonly GameSpeed[] = [1, 2, 4];
-
-const rate = (value: number): string => `${value >= 0 ? '+' : ''}${Number(value.toFixed(1))}/s`;
 
 const rateClass = (value: number): string => `hud-rate kit-num ${value <= 0 ? 'is-danger' : 'is-success'}`;
 
@@ -21,23 +21,10 @@ export const Hud = (props: HudProps) => {
   const [speedOpen, setSpeedOpen] = createSignal(false);
   let speedDrop: HTMLDivElement | undefined;
 
-  createEffect(() => {
-    if (!speedOpen()) return;
-    const closeOnOutside = (event: PointerEvent) => {
-      if (speedDrop && !speedDrop.contains(event.target as Node)) setSpeedOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnOutside);
-    onCleanup(() => document.removeEventListener('pointerdown', closeOnOutside));
-  });
+  useOutsidePointer(speedOpen, () => speedDrop, () => setSpeedOpen(false));
 
-  const currentSpeed = () => {
-    store.version();
-    return store.state.speed;
-  };
-  const me = () => {
-    store.version();
-    return store.state.empires[store.state.playerEmpire] ?? store.state.empires[0]!;
-  };
+  const currentSpeed = live(() => store.state.speed);
+  const me = live(() => store.state.empires[store.state.playerEmpire] ?? store.state.empires[0]!);
 
   const unlimited = () => hasUnlimitedResources(me());
 
@@ -48,27 +35,27 @@ export const Hud = (props: HudProps) => {
           <GiCoin class="hud-res-icon is-gold" />
           <span class="street-label">Gold</span>
           <Show when={!unlimited()} fallback={<strong class="hud-infinite">∞</strong>}>
-            <strong>{Math.floor(me().gold)}<sup class={rateClass(me().goldBalance)}>{rate(me().goldBalance)}</sup></strong>
+            <strong>{Math.floor(me().gold)}<sup class={rateClass(me().goldBalance)}>{perSecond(me().goldBalance)}</sup></strong>
           </Show>
         </div>
         <div class="street-stat is-info">
           <FaAtom class="hud-res-icon is-science" />
           <span class="street-label">Science</span>
           <Show when={!unlimited()} fallback={<strong class="hud-infinite">∞</strong>}>
-            <strong>{Math.floor(me().science)}<sup class={rateClass(me().scienceBalance)}>{rate(me().scienceBalance)}</sup></strong>
+            <strong>{Math.floor(me().science)}<sup class={rateClass(me().scienceBalance)}>{perSecond(me().scienceBalance)}</sup></strong>
           </Show>
         </div>
         <div class="rail-divider" />
         <div class="street-stat">
           <FaUsers class="hud-res-icon" />
           <span class="street-label">Civilians</span>
-          <strong>{Math.floor(me().civilians)}<sup class={rateClass(me().civilianBalance)}>{rate(me().civilianBalance)}</sup></strong>
+          <strong>{Math.floor(me().civilians)}<sup class={rateClass(me().civilianBalance)}>{perSecond(me().civilianBalance)}</sup></strong>
         </div>
         <div class="street-stat">
           <GiCrossedSwords class="hud-res-icon is-troops" />
           <span class="street-label">Troops</span>
           <strong>{Math.floor(me().soldiers)}</strong>
-          <span>/ {Math.floor(me().reserveCap)}<sup class={rateClass(me().troopBalance)}>{rate(me().troopBalance)}</sup></span>
+          <span>/ {Math.floor(me().reserveCap)}<sup class={rateClass(me().troopBalance)}>{perSecond(me().troopBalance)}</sup></span>
         </div>
       </div>
 

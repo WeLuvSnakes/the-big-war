@@ -1,7 +1,8 @@
 import './DeploySlider.css';
 import type { DeploySliderProps } from './DeploySlider.types';
+import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { useOutsidePointer } from '@the-big-war/frontend/ui/hooks/hooks';
 import { FaUndo, GiCrossedSwords } from '@the-big-war/frontend/ui/icons/icons';
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 
 export type { DeploySliderProps };
 
@@ -12,14 +13,7 @@ export const DeploySlider = (props: DeploySliderProps) => {
   const [open, setOpen] = createSignal(false);
   let drop: HTMLDivElement | undefined;
 
-  createEffect(() => {
-    if (!open()) return;
-    const closeOnOutside = (event: PointerEvent) => {
-      if (drop && !drop.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnOutside);
-    onCleanup(() => document.removeEventListener('pointerdown', closeOnOutside));
-  });
+  useOutsidePointer(open, () => drop, () => setOpen(false));
 
   const [height, setHeight] = createSignal<number | null>(null);
   onMount(() => {

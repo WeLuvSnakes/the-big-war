@@ -1,3 +1,4 @@
+import { clock } from '@the-big-war/frontend/ui/format/format';
 
 
 import './EndScreen.css';
@@ -23,7 +24,7 @@ export const EndScreen = (props: EndScreenProps) => {
           <span class="kit-note">
             Empires: {store.state.empires.filter(empire => empire.alive).length} /{' '}
             {store.state.empires.length} · Time{' '}
-            {Math.floor(store.state.elapsed / 60)}:{String(Math.floor(store.state.elapsed % 60)).padStart(2, '0')}
+            {clock(store.state.elapsed)}
           </span>
         </div>
         <div class="kit-actions">

@@ -1,3 +1,4 @@
+import { signed, signedPercent } from '@the-big-war/frontend/ui/format/format';
 
 
 import './FactionPicker.css';
@@ -10,11 +11,8 @@ export type { FactionPickerProps };
 
 function bonusLine(modifier: Modifier): string {
   const name = modifier.key;
-  if (modifier.mul !== undefined) {
-    const delta = Math.round((modifier.mul - 1) * 100);
-    return `${delta >= 0 ? '+' : ''}${delta}% ${name}`;
-  }
-  if (modifier.add !== undefined) return `${modifier.add >= 0 ? '+' : ''}${modifier.add} ${name}`;
+  if (modifier.mul !== undefined) return `${signedPercent(Math.round((modifier.mul - 1) * 100))} ${name}`;
+  if (modifier.add !== undefined) return `${signed(modifier.add)} ${name}`;
   return name;
 }
 

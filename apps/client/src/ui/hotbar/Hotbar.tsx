@@ -2,11 +2,13 @@ import './Hotbar.css';
 import { buildingLabel } from '../text';
 import { buildingGlyph } from './building-glyph';
 import type { HotbarProps } from './Hotbar.types';
+import { createSignal, For, Show } from 'solid-js';
 import { gameStore } from '../../game/store/store.service';
+import { useEvent } from '@the-big-war/frontend/ui/hooks/hooks';
+import { classes } from '@the-big-war/frontend/ui/format/format';
 import { hasUnlock } from '../../game/research/research.service';
 import { FaInfoCircle } from '@the-big-war/frontend/ui/icons/icons';
 import { placementError } from '../../game/building/building.service';
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import type { BuildingKind } from '../../game/building/building.types';
 import { BUILDING_KINDS } from '../../game/building/building.constants';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
@@ -74,16 +76,12 @@ export const Hotbar = (props: HotbarProps) => {
     window.addEventListener('pointerup', onUp);
   };
 
-  onMount(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-      const index = Number(event.key) - 1;
-      const kind = placeable()[index];
-      if (Number.isInteger(index) && kind) select(kind);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    onCleanup(() => window.removeEventListener('keydown', onKeyDown));
+  useEvent(window, 'keydown', event => {
+    const target = event.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    const index = Number(event.key) - 1;
+    const kind = placeable()[index];
+    if (Number.isInteger(index) && kind) select(kind);
   });
 
   return (
@@ -93,11 +91,11 @@ export const Hotbar = (props: HotbarProps) => {
           const affordable = () => me().gold >= cost(kind);
           return (
             <div
-              class={[
+              class={classes(
                 'street-action hud-hotbar-slot',
                 isSelected(kind) && 'is-active',
                 affordable() ? 'is-affordable' : 'is-unaffordable',
-              ].filter(Boolean).join(' ')}
+              )}
               onMouseEnter={() => setHovered(kind)}
               onMouseLeave={() => setHovered(current => (current === kind ? null : current))}
               onPointerDown={event => startDrag(kind, event)}

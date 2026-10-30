@@ -30,3 +30,10 @@ export function setGameStore(store: GameStore | null): GameStore | null {
   singleton = store;
   return previous;
 }
+
+export function live<T>(read: () => T): () => T {
+  return () => {
+    gameStore().version();
+    return read();
+  };
+}
