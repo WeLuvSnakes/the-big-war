@@ -99,6 +99,10 @@ export interface BatteryConfig {
 export interface WaveConfig {
   readonly retreatPenalty: number;
 
+  readonly marchSecondsPerHex: number;
+
+  readonly maxMarchSeconds: number;
+
   readonly baseTilesPerSecond: number;
   readonly tilesPerRootTroop: number;
 

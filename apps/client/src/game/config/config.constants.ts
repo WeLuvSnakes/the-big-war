@@ -54,8 +54,10 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   },
   wave: {
     retreatPenalty: 0.25,
-    baseTilesPerSecond: 2,
-    tilesPerRootTroop: 0.8,
+    baseTilesPerSecond: 0.5,
+    tilesPerRootTroop: 0.2,
+    marchSecondsPerHex: 0.5,
+    maxMarchSeconds: 15,
     neutralTroopsPerTile: 0.15,
     minTroopsPerTile: 0.3,
     densityWeight: 1,

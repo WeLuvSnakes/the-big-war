@@ -6,8 +6,8 @@ import { returnToReserve } from '../troops/troops.service';
 import { shellingFactor } from '../building/building.service';
 import { isClaimable, isPassable } from '../map/terrain.service';
 import { ENGINE_TUNING } from '../simulation/simulation.constants';
-import type { Offensive } from './offensive.types';
-import { ownedCells } from '../map/world-index.service';
+import type { Offensive, OffensiveMarch } from './offensive.types';
+import { buildingCellsOf, ownedCells } from '../map/world-index.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { createMinHeap, heapClear, heapPush } from '@the-big-war/game-engine/collections/min-heap.service';
 import { distance, gridIndex, neighbors, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
@@ -74,6 +74,7 @@ function newOffensive(state: GameState, empire: EmpireId, target: EmpireId, focu
     troops,
     focus: { q: focus.q, r: focus.r },
     head: { q: focus.q, r: focus.r },
+    march: null,
     budget: 0,
     order: 0,
     taken: 0,
@@ -105,8 +106,35 @@ export function launchOffensive(
   if (remaining <= 0) return true;
   const offensive = newOffensive(state, empire, target, focus, remaining);
   seedFrontier(state, offensive);
+  offensive.march = planMarch(state, offensive);
   state.offensives.push(offensive);
   return true;
+}
+
+function planMarch(state: GameState, offensive: Offensive): OffensiveMarch | null {
+  const from = nearestBy(buildingCellsOf(state, offensive.empire), offensive.focus);
+  const entry = nearestBy([...offensive.queued].map(at => state.grid.cells[at]!), offensive.focus);
+  if (!from || !entry) return null;
+  const { marchSecondsPerHex, maxMarchSeconds } = state.config.wave;
+  const duration = Math.min(maxMarchSeconds, distance(from, entry) * marchSecondsPerHex);
+  if (duration <= 0) return null;
+  const start = { q: from.q, r: from.r };
+  offensive.head = start;
+  offensive.recent.push(start);
+  return { from: start, to: { q: entry.q, r: entry.r }, duration, progress: 0 };
+}
+
+function nearestBy(cells: Iterable<HexCell>, to: Axial): HexCell | null {
+  let best: HexCell | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const cell of cells) {
+    const d = distance(cell, to);
+    if (d < bestDistance) {
+      best = cell;
+      bestDistance = d;
+    }
+  }
+  return best;
 }
 
 export function launchBeachhead(state: GameState, empire: EmpireId, beach: HexCell, focus: Axial, troops: number): void {

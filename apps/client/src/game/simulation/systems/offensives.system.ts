@@ -4,6 +4,7 @@ import type { GameState } from '../../state/state.types';
 import { NEUTRAL_OWNER } from '../../empire/empire.constants';
 import { isTotalWar } from '../../diplomacy/diplomacy.service';
 import type { Offensive } from '../../offensive/offensive.types';
+import { lerp } from '@the-big-war/game-engine/math/math.service';
 import { setBuilding, setOwner } from '../../map/world-index.service';
 import { heapPop } from '@the-big-war/game-engine/collections/min-heap.service';
 import { attackPowerAt, defencePowerAt } from '../../offensive/wave-power.service';
@@ -28,10 +29,24 @@ export function stepOffensives(state: GameState, dt: number): void {
 
 function tilesPerSecond(state: GameState, offensive: Offensive): number {
   const { baseTilesPerSecond, tilesPerRootTroop } = state.config.wave;
-  return (baseTilesPerSecond + tilesPerRootTroop * Math.sqrt(offensive.troops)) * tileScale(state);
+  return (baseTilesPerSecond + tilesPerRootTroop * Math.sqrt(offensive.troops)) * Math.sqrt(tileScale(state));
+}
+
+function stepMarch(offensive: Offensive, dt: number): boolean {
+  const march = offensive.march;
+  if (!march) return false;
+  march.progress += dt;
+  const t = Math.min(1, march.progress / march.duration);
+  offensive.head = { q: lerp(march.from.q, march.to.q, t), r: lerp(march.from.r, march.to.r, t) };
+  offensive.recent[0] = offensive.head;
+  if (t < 1) return true;
+  offensive.march = null;
+  offensive.recent.length = 0;
+  return false;
 }
 
 function advance(state: GameState, offensive: Offensive, dt: number): void {
+  if (stepMarch(offensive, dt)) return;
   offensive.budget += tilesPerSecond(state, offensive) * dt;
   while (offensive.budget >= 1) {
     if (offensive.troops <= 0) {

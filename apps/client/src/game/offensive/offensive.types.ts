@@ -11,6 +11,14 @@ export interface ModifierLine {
   readonly defence: number;
 }
 
+export interface OffensiveMarch {
+  readonly from: Axial;
+  readonly to: Axial;
+  readonly duration: number;
+
+  progress: number;
+}
+
 export interface Offensive {
   readonly id: OffensiveId;
   readonly empire: EmpireId;
@@ -19,6 +27,7 @@ export interface Offensive {
   troops: number;
   focus: Axial;
   head: Axial;
+  march: OffensiveMarch | null;
 
   budget: number;
   order: number;

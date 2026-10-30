@@ -185,7 +185,8 @@ export class SoldiersLayer {
       const lateral = ((seed % 10) / 10 - 0.5) * hexSize * 0.8;
       const depth = (((seed * 7) % 10) / 10 - 0.5) * hexSize * 0.8;
       const sprite = this.acquire();
-      sprite.texture = this.texture(color, t < 0.45 ? 'windup' : 'strike');
+      const marchFrame = t < 0.5 ? 'step' : 'idle';
+      sprite.texture = this.texture(color, offensive.march ? marchFrame : t < 0.45 ? 'windup' : 'strike');
       sprite.scale.set(offensive.focus.q < hex.q ? -pixel : pixel, pixel);
       sprite.position.set(at.x + lateral, at.y + depth);
       sprite.zIndex = sprite.position.y;
