@@ -4,12 +4,13 @@ import './Shell.css';
 import { Hud } from '../hud/Hud';
 import { errorLabel } from '../text';
 import { Hotbar } from '../hotbar/Hotbar';
-import { openAbout } from '../about/about';
 import { AboutView } from '../about/AboutView';
 import { VOID_COLOR } from '../../render/theme';
+import { audio } from '../../audio/audio.service';
 import { ArmyPanel } from '../army-panel/ArmyPanel';
 import { EndScreen } from '../end-screen/EndScreen';
 import { WikiPanel } from '../wiki-panel/WikiPanel';
+import { aboutCard, openAbout } from '../about/about';
 import { BuildPanel } from '../build-panel/BuildPanel';
 import { MenuScreen } from '../menu-screen/MenuScreen';
 import { SmallScreen } from '../small-screen/SmallScreen';
@@ -17,6 +18,7 @@ import type { NoticesProps, PanelId } from './Shell.types';
 import { DeploySlider } from '../deploy-slider/DeploySlider';
 import { assignNationColors } from '../../render/nation-colors';
 import { ResearchPanel } from '../research-panel/ResearchPanel';
+import { useEvent } from '@the-big-war/frontend/ui/hooks/hooks';
 import { gameStore, live } from '../../game/store/store.service';
 import { DiplomacyPanel } from '../diplomacy-panel/DiplomacyPanel';
 import { createWorld, type WorldRenderer } from '../../render/world';
@@ -25,9 +27,9 @@ import type { BuildingKind } from '../../game/building/building.types';
 import { pendingOffersTo } from '../../game/diplomacy/diplomacy.service';
 import { createAttractMode, type AttractMode } from '../../session/attract';
 import { createMatchRuntime, type MatchRuntime } from '../../session/runtime';
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { DEFAULT_PLAYER_NAME, configFromSettings, createMatchFlow } from '../../session/flow';
-import { FaBook, FaFlag, FaHammer, FaCrosshairs, FaAtom, FaSignOutAlt } from '@the-big-war/frontend/ui/icons/icons';
+import { FaBook, FaFlag, FaHammer, FaCrosshairs, FaAtom, FaSignOutAlt, FaMusic, FaVolumeUp } from '@the-big-war/frontend/ui/icons/icons';
 
 export type { NoticesProps, PanelId };
 
@@ -65,6 +67,24 @@ export const Shell = () => {
   });
 
   onCleanup(() => attract()?.stop());
+
+  useEvent(window, 'keydown', () => audio.unlock());
+  useEvent(window, 'pointerdown', event => {
+    audio.unlock();
+    if ((event.target as Element | null)?.closest?.('button')) audio.play('click');
+  });
+
+  createEffect(() => audio.setDucked(aboutCard() !== null));
+
+  createEffect(() => {
+    const screen = flow.screen();
+    if (screen === 'menu') audio.setMood('menu');
+    if (screen === 'match') audio.setMood('peace');
+    if (screen === 'end') {
+      audio.setMood('aftermath');
+      untrack(() => audio.play(flow.lastResult()?.playerWon ? 'victory' : 'defeat'));
+    }
+  });
 
   const startMatch = async () => {
     const settings = flow.settings();
@@ -123,6 +143,14 @@ export const Shell = () => {
       <div ref={el => (host = el)} class="world-host" />
 
       <Show when={flow.screen() === 'menu'}>
+        <div class="audio-toggles">
+          <button type="button" aria-label="Music" aria-pressed={audio.musicOn()} onClick={() => audio.toggleMusic()}>
+            <FaMusic />
+          </button>
+          <button type="button" aria-label="Sound" aria-pressed={audio.sfxOn()} onClick={() => audio.toggleSfx()}>
+            <FaVolumeUp />
+          </button>
+        </div>
         <MenuScreen
           settings={flow.settings()}
           faction={flow.playerFaction()}
@@ -178,6 +206,8 @@ export const Shell = () => {
             onClick={() => togglePanel('wiki')}
           />
           <div class="rail-divider rail-bottom">
+            <RailAction label="Music" icon={<FaMusic />} active={audio.musicOn()} onClick={() => audio.toggleMusic()} />
+            <RailAction label="Sound" icon={<FaVolumeUp />} active={audio.sfxOn()} onClick={() => audio.toggleSfx()} />
             <RailAction label="Menu" icon={<FaSignOutAlt />} danger onClick={() => backToMenu()} />
           </div>
         </Rail>

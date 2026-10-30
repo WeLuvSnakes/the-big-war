@@ -17,7 +17,7 @@ export const handleSendTroops = withLiveEmpire<SendTroopsCommand>((state, comman
 
   const from = gridAt(state.grid, command.hex);
   const to = gridAt(state.grid, command.target);
-  if (!from || !to || !isPassable(to.terrain)) return fail(command.type, 'invalid_target');
+  if (!from || !to) return fail(command.type, 'invalid_target');
   if (from.owner !== command.empire || to.owner === command.empire) return fail(command.type, 'invalid_target');
   if (distance(command.hex, command.target) !== 1) return marchColumn(state, command, troops);
   if (command.intent === 'attack' && stagingHex(state, command.empire, command.target)) {
@@ -25,6 +25,7 @@ export const handleSendTroops = withLiveEmpire<SendTroopsCommand>((state, comman
   }
 
   if (to.owner === NEUTRAL_OWNER) {
+    if (!isPassable(to.terrain)) return marchColumn(state, command, troops, command.hex);
     if (command.intent !== 'attack') return fail(command.type, 'invalid_target');
     empire.soldiers -= troops;
     launchExpedition(state, command.empire, command.target, troops);

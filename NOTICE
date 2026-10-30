@@ -11,4 +11,5 @@ under the Ubuntu Font Licence 1.0 (a free, redistributable licence that permits
 embedding and redistribution with the licence text). Keep the licence text with
 any distribution of these files: https://ubuntu.com/legal/font-licence
 
-All other assets in this repository are original work.
+All other assets in this repository are original work. In-game sound effects and
+music are synthesised at runtime and use no sample files.

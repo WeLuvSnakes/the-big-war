@@ -1,9 +1,9 @@
 import { ENGINE_TUNING } from '../simulation.constants';
-import { terrainDefenceAt } from '../../map/terrain.service';
 import { NEUTRAL_OWNER } from '../../empire/empire.constants';
 import type { Column, GameState } from '../../state/state.types';
 import { canAttack, declareWar } from '../../diplomacy/diplomacy.service';
 import { gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { isPassable, passableAt, terrainDefenceAt } from '../../map/terrain.service';
 import { joinFront, launchExpedition, returnToReserve } from '../../troops/troops.service';
 
 export function stepColumns(state: GameState, dt: number): void {
@@ -53,15 +53,17 @@ function advanceColumn(state: GameState, column: Column, dt: number): boolean {
 
   const terrain = terrainDefenceAt(state, next);
   const claiming = nextCell.owner === NEUTRAL_OWNER;
-  const cost = ENGINE_TUNING.claimSoldiersPerHex * terrain;
+  const mountain = !isPassable(nextCell.terrain);
+  const cost = ENGINE_TUNING.claimSoldiersPerHex * terrain * (mountain ? ENGINE_TUNING.mountainClaimSoldiers : 1);
   if (claiming && column.troops < cost) {
     returnToReserve(state, column.empire, column.troops);
     return false;
   }
-  const duration = (claiming ? ENGINE_TUNING.claimSecondsPerHex : ENGINE_TUNING.walkSecondsPerHex) * terrain;
+  const duration = columnLegDuration(state, column);
   column.progress += dt;
   if (column.progress < duration) return true;
   if (claiming) nextCell.owner = column.empire;
+  if (claiming && mountain) column.troops -= cost;
   column.step += 1;
   column.progress = 0;
   return true;
@@ -72,5 +74,7 @@ export function columnLegDuration(state: GameState, column: Column): number {
   if (!next) return 1;
   const terrain = terrainDefenceAt(state, next);
   const claiming = gridAt(state.grid, next)?.owner === NEUTRAL_OWNER;
-  return (claiming ? ENGINE_TUNING.claimSecondsPerHex : ENGINE_TUNING.walkSecondsPerHex) * terrain;
+  if (!claiming) return ENGINE_TUNING.walkSecondsPerHex * terrain;
+  const mountain = !passableAt(state, next);
+  return ENGINE_TUNING.claimSecondsPerHex * terrain * (mountain ? ENGINE_TUNING.mountainClaimSeconds : 1);
 }

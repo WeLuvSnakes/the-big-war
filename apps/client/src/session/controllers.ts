@@ -1,3 +1,4 @@
+import { audio } from '../audio/audio.service';
 import { clampPercent } from '@the-big-war/game-engine/math/math.service';
 
 
@@ -33,6 +34,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
 
   const noticeTimers = new Map<CommandError, ReturnType<typeof setTimeout>>();
   const notice = (reason: CommandError) => {
+    audio.play('error');
     const pending = noticeTimers.get(reason);
     if (pending) clearTimeout(pending);
     else setNotices(current => [...current, { id: ++noticeId, reason }]);

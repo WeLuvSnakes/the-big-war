@@ -1,6 +1,8 @@
 import { createSignal } from 'solid-js';
+import { audio } from '../audio/audio.service';
 import { createControllers } from './controllers';
 import type { Camera } from '../render/world.types';
+import { createMatchAudio } from '../audio/match-audio';
 import { panBy } from '@the-big-war/frontend/session/camera';
 import { placementError } from '../game/building/building.service';
 import type { MatchRuntime, MatchRuntimeOptions } from './runtime.types';
@@ -60,6 +62,8 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
     },
     onTroopsSent: (from, target) => {
       world.spawnFx('captureFlash', target, undefined);
+      audio.play('march');
+      audio.play('warCry');
       void from;
     },
   });
@@ -126,9 +130,11 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
 
   let detach: (() => void) | null = null;
   let endedNotified = false;
+  const matchAudio = createMatchAudio(store);
 
   const loop = createFrameLoop(dt => {
     store.step(dt);
+    matchAudio.update(dt);
 
     const tool = controllers.tool();
     const hover = controllers.hoverHex();

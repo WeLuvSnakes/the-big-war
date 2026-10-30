@@ -151,7 +151,7 @@ function ownedPath(state: GameState, empire: EmpireId, from: Axial, to: Axial): 
     }
     for (const next of neighbors(hex)) {
       if (!gridInBounds(grid, next.q, next.r) || previous.has(key(next))) continue;
-      if (gridAt(grid, next)?.owner !== empire || !passableAt(state, next)) continue;
+      if (gridAt(grid, next)?.owner !== empire) continue;
       previous.set(key(next), hex);
       queue.push(next);
     }
@@ -170,7 +170,6 @@ export function marchPath(state: GameState, empire: EmpireId, target: Axial, bor
 
 function passablePath(state: GameState, empire: EmpireId, target: Axial, border: Axial | null): Axial[] | null {
   const { grid } = state;
-  if (!passableAt(state, target)) return null;
   const key = (hex: Axial) => gridIndex(grid, hex.q, hex.r);
   const towardTarget = new Map<number, Axial | null>([[key(target), null]]);
   const queue: Axial[] = [target];
@@ -184,7 +183,7 @@ function passablePath(state: GameState, empire: EmpireId, target: Axial, border:
     }
     for (const next of neighbors(hex)) {
       if (!gridInBounds(grid, next.q, next.r) || towardTarget.has(key(next))) continue;
-      if (!passableAt(state, next)) continue;
+      if (!passableAt(state, next) && gridAt(grid, next)?.owner !== empire) continue;
       towardTarget.set(key(next), hex);
       queue.push(next);
     }

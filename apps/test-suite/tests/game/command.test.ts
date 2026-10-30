@@ -16,6 +16,7 @@ import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.cons
 import { stepColumns } from '@the-big-war/client/game/simulation/systems/columns.system';
 import { gridAt, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { stepBuildings } from '@the-big-war/client/game/simulation/systems/buildings.system';
+import { stepExpansion } from '@the-big-war/client/game/simulation/systems/expansion.system';
 import type { Building, BuildingKind } from '@the-big-war/client/game/building/building.types';
 import { buildingCost, placementError } from '@the-big-war/client/game/building/building.service';
 
@@ -139,6 +140,24 @@ describe('SendTroops', () => {
     for (let i = 0; i < 300; i++) stepColumns(state, 1 / 30);
     for (let q = 1; q <= 6; q++) expect(gridAt(state.grid, { q, r: 2 })!.owner).toBe(0);
     expect(gridAt(state.grid, { q: 1, r: 0 })!.owner).toBe(NEUTRAL_OWNER);
+  });
+
+  test('a mountain is claimed by a column at extra cost and stops there', () => {
+    const state = makeState();
+    clearStaging(state);
+    for (const cell of state.grid.cells) cell.owner = cell.q === 0 ? 0 : NEUTRAL_OWNER;
+    const target = { q: 1, r: 2 };
+    gridAt(state.grid, target)!.terrain = 'mountain';
+    const result = dispatch(state, { type: 'SendTroops', empire: 0, hex: { q: 0, r: 2 }, target, percent: 50, intent: 'attack' });
+    expect(result.ok).toBe(true);
+    for (let i = 0; i < 600; i++) {
+      stepColumns(state, 1 / 30);
+      stepExpansion(state, 1 / 30);
+    }
+    expect(gridAt(state.grid, target)!.owner).toBe(0);
+    expect(gridAt(state.grid, target)!.terrain).toBe('mountain');
+    expect(gridAt(state.grid, { q: 2, r: 2 })!.owner).toBe(NEUTRAL_OWNER);
+    expect(state.empires[0]!.soldiers).toBeCloseTo(100 - 5 * 1.35);
   });
 
   test('a column sent to claim wild land stops at another nation and never attacks it', () => {

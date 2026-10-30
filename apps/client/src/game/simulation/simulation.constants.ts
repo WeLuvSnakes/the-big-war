@@ -25,6 +25,8 @@ export const ENGINE_TUNING = {
   claimHexesPerSize: 6,
   maxClaimsPerTick: 24,
   claimSecondsPerHex: 1.2,
+  mountainClaimSoldiers: 5,
+  mountainClaimSeconds: 4,
   walkSecondsPerHex: 0.35,
   squadTargetPull: 0.3,
   squadStraightBonus: 6,
