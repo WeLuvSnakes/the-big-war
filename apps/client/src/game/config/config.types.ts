@@ -148,6 +148,8 @@ export interface GatherConfig {
   readonly workSeconds: number;
   readonly walkSecondsPerHex: number;
 
+  readonly roadWalkFactor: number;
+
   readonly goldPerLoad: number;
 
   readonly oreLoadsPerTile: number;

@@ -7,9 +7,9 @@ import { NEUTRAL_OWNER } from '../empire/empire.constants';
 import type { Offensive } from '../offensive/offensive.types';
 import type { Biome, HexCell, HexGrid, Terrain } from '../map/map.types';
 import { createMinHeap } from '@the-big-war/game-engine/collections/min-heap.service';
-import type { FrameMessage, OffensiveView, ShipView, SnapshotMessage } from './sim.types';
-import { drainChangedTiles, markTile, setBuilding, setOwner } from '../map/world-index.service';
-import type { Building, BuildingKind, Gatherer, GathererPhase } from '../building/building.types';
+import type { FrameMessage, OffensiveView, ShipView, SnapshotMessage, WalkerView } from './sim.types';
+import { addRoad, drainChangedTiles, markTile, setBuilding, setOwner } from '../map/world-index.service';
+import type { Building, BuildingKind, Gatherer, GathererPhase, Walker } from '../building/building.types';
 
 const TERRAINS: readonly Terrain[] = ['plain', 'forest', 'mountain', 'ore', 'water'];
 const BIOMES: readonly Biome[] = ['temperate', 'steppe', 'desert', 'tundra', 'taiga', 'jungle', 'swamp', 'volcanic'];
@@ -33,7 +33,7 @@ const KINDS: readonly BuildingKind[] = [
   'tank',
 ];
 
-const TILE_STRIDE = 4;
+const TILE_STRIDE = 5;
 const BUILDING_STRIDE = 13;
 const GATHERER_STRIDE = 7;
 
@@ -51,6 +51,7 @@ function encodeTiles(state: GameState): Float64Array<ArrayBuffer> {
     tiles[cursor++] = cell.owner;
     tiles[cursor++] = TERRAINS.indexOf(cell.terrain);
     tiles[cursor++] = orNaN(cell.harvested);
+    tiles[cursor++] = cell.road ? 1 : 0;
   });
   return tiles;
 }
@@ -103,6 +104,10 @@ function offensiveView(offensive: Offensive): OffensiveView {
   return view;
 }
 
+function walkerView({ path: _path, ...view }: Walker): WalkerView {
+  return view;
+}
+
 export function encodeFrame(state: GameState, paused: boolean, paths: ShipPaths): FrameMessage {
   return {
     type: 'frame',
@@ -125,6 +130,7 @@ export function encodeFrame(state: GameState, paused: boolean, paths: ShipPaths)
     ...encodeBuildings(state),
     empires: state.empires,
     offensives: state.offensives.map(offensiveView),
+    walkers: state.walkers.map(walkerView),
     ships: state.ships.map(ship => shipView(ship, paths)),
     relations: state.relations,
     offerCooldowns: state.offerCooldowns,
@@ -138,11 +144,13 @@ export function encodeSnapshot(state: GameState, paused: boolean, paths: ShipPat
   const terrains = new Uint8Array(cells.length);
   const biomes = new Uint8Array(cells.length);
   const harvested = new Float64Array(cells.length);
+  const roads = new Uint8Array(cells.length);
   cells.forEach((cell, at) => {
     owners[at] = cell.owner;
     terrains[at] = TERRAINS.indexOf(cell.terrain);
     biomes[at] = BIOMES.indexOf(cell.biome);
     harvested[at] = orNaN(cell.harvested);
+    roads[at] = cell.road ? 1 : 0;
   });
   return {
     type: 'snapshot',
@@ -155,6 +163,7 @@ export function encodeSnapshot(state: GameState, paused: boolean, paths: ShipPat
     terrains,
     biomes,
     harvested,
+    roads,
     landmass: state.map.landmass.slice() as Int32Array<ArrayBuffer>,
     waterBody: state.map.waterBody.slice() as Int32Array<ArrayBuffer>,
     landSizes: state.map.landSizes,
@@ -173,6 +182,7 @@ export function snapshotTransfer(snapshot: SnapshotMessage): Transferable[] {
     snapshot.terrains.buffer,
     snapshot.biomes.buffer,
     snapshot.harvested.buffer,
+    snapshot.roads.buffer,
     snapshot.landmass.buffer,
     snapshot.waterBody.buffer,
     ...frameTransfer(snapshot.frame),
@@ -187,6 +197,7 @@ function applyTiles(state: GameState, tiles: Float64Array): void {
     const harvested = orNull(tiles[row + 3]!);
     if (harvested === null) delete cell.harvested;
     else cell.harvested = harvested;
+    if (tiles[row + 4]! === 1) addRoad(state, cell);
     markTile(state, cell);
   }
 }
@@ -293,6 +304,7 @@ export function applyFrame(state: GameState, frame: FrameMessage): void {
     frontier: createMinHeap(),
     queued: new Set<number>(),
   }));
+  state.walkers = frame.walkers.map(view => ({ ...view, path: [] }));
   state.ships = reconcile(state.ships, frame.ships, view => ({ ...view, path: view.path ?? [] }));
   rebuildShipHash(state);
   state.relations = frame.relations;
@@ -309,7 +321,7 @@ export function emptyMirror(config: GameConfig): GameState {
 }
 
 export function applySnapshot(snapshot: SnapshotMessage): GameState {
-  const { width, height, owners, terrains, biomes, harvested } = snapshot;
+  const { width, height, owners, terrains, biomes, harvested, roads } = snapshot;
   const cells: HexCell[] = [];
   for (let at = 0; at < owners.length; at++) {
     const cell: HexCell = {
@@ -329,6 +341,9 @@ export function applySnapshot(snapshot: SnapshotMessage): GameState {
     waterBody: snapshot.waterBody,
     landSizes: snapshot.landSizes,
     waterSizes: snapshot.waterSizes,
+  });
+  roads.forEach((road, at) => {
+    if (road === 1) addRoad(state, state.grid.cells[at]!);
   });
   applyFrame(state, snapshot.frame);
   return state;

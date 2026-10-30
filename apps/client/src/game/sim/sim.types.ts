@@ -2,12 +2,14 @@ import type { Ship } from '../ship/ship.types';
 import type { Empire } from '../empire/empire.types';
 import type { ClientStore } from '../store/store.types';
 import type { GameConfig } from '../config/config.types';
+import type { Walker } from '../building/building.types';
 import type { Offensive } from '../offensive/offensive.types';
 import type { GameState, EndReason } from '../state/state.types';
 import type { Command, CommandResult } from '../commands/commands.types';
 import type { MatchStatus } from '@the-big-war/game-engine/simulation/simulation.types';
 
 export type OffensiveView = Omit<Offensive, 'frontier' | 'queued'>;
+export type WalkerView = Omit<Walker, 'path'>;
 
 export type ShipView = Omit<Ship, 'path'> & { path?: number[] };
 
@@ -33,6 +35,7 @@ export interface FrameMessage {
   readonly gatherers: Float64Array<ArrayBuffer>;
   readonly empires: readonly Empire[];
   readonly offensives: readonly OffensiveView[];
+  readonly walkers: readonly WalkerView[];
   readonly ships: readonly ShipView[];
   readonly relations: GameState['relations'];
   readonly offerCooldowns: GameState['offerCooldowns'];
@@ -50,6 +53,7 @@ export interface SnapshotMessage {
   readonly terrains: Uint8Array<ArrayBuffer>;
   readonly biomes: Uint8Array<ArrayBuffer>;
   readonly harvested: Float64Array<ArrayBuffer>;
+  readonly roads: Uint8Array<ArrayBuffer>;
   readonly landmass: Int32Array<ArrayBuffer>;
   readonly waterBody: Int32Array<ArrayBuffer>;
   readonly landSizes: readonly number[];

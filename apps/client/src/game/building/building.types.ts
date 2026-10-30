@@ -1,4 +1,5 @@
 import type { HexCell } from '../map/map.types';
+import type { EmpireId } from '../empire/empire.types';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 
 export type BuildingId = number;
@@ -30,6 +31,19 @@ export interface Gatherer {
 
   progress: number;
   duration: number;
+}
+
+export type WalkerPhase = 'outbound' | 'building' | 'returning';
+
+export interface Walker {
+  readonly site: BuildingId;
+  readonly empire: EmpireId;
+  readonly path: readonly number[];
+
+  pos: Axial;
+  phase: WalkerPhase;
+  leg: number;
+  progress: number;
 }
 
 export interface Building {

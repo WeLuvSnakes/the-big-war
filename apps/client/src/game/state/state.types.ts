@@ -1,4 +1,5 @@
 import type { Ship, ShipId } from '../ship/ship.types';
+import type { Walker } from '../building/building.types';
 import type { WorldIndex } from '../map/world-index.types';
 import type { BuildingId } from '../building/building.types';
 import type { HexGrid, WorldLabels } from '../map/map.types';
@@ -21,6 +22,7 @@ export interface GameState extends SimulationState {
 
   empires: Empire[];
   offensives: Offensive[];
+  walkers: Walker[];
   nextOffensiveId: OffensiveId;
   ships: Ship[];
   nextShipId: ShipId;

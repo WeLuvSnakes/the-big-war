@@ -115,6 +115,7 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
     loadsPerTile: 10,
     workSeconds: 3,
     walkSecondsPerHex: 0.8,
+    roadWalkFactor: 0.5,
     goldPerLoad: 1,
     oreLoadsPerTile: 40,
     oreGoldPerLoad: 3,

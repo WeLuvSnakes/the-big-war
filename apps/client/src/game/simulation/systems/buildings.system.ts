@@ -3,12 +3,15 @@ import type { GameState } from '../../state/state.types';
 import type { EmpireId } from '../../empire/empire.types';
 import { returnToReserve } from '../../troops/troops.service';
 import type { Building } from '../../building/building.types';
+import { crewConstruction, stepWalkers } from './walkers.system';
 import { allBuildingCells, buildingCellsOf, setBuilding } from '../../map/world-index.service';
 
 export function stepBuildings(state: GameState, dt: number): void {
-  for (const building of activeConstruction(state)) {
+  const crewed = crewConstruction(state, activeConstruction(state));
+  for (const building of crewed) {
     building.buildRemaining = Math.max(0, building.buildRemaining - dt);
   }
+  stepWalkers(state, dt);
   for (const cell of allBuildingCells(state)) {
     const building = cell.building;
     if (!building || building.buildRemaining > 0) continue;

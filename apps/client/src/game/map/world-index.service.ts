@@ -68,6 +68,13 @@ function markChanged(index: WorldIndex, at: number): void {
   index.changedTiles.push(at);
 }
 
+export function addRoad(state: GameState, cell: HexCell): void {
+  if (cell.road) return;
+  cell.road = true;
+  state.index.roads.push(gridIndex(state.grid, cell.q, cell.r));
+  markTile(state, cell);
+}
+
 export function markTile(state: GameState, cell: HexCell): void {
   markChanged(state.index, gridIndex(state.grid, cell.q, cell.r));
 }
@@ -85,6 +92,7 @@ export function createWorldIndex(grid: HexGrid, biomes?: BiomeTable): WorldIndex
     tiles: new Map(),
     sortedTiles: new Map(),
     buildings: [],
+    roads: [],
     empireBuildings: new Map(),
     population: new Map(),
     changedTiles: [],

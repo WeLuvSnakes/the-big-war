@@ -35,6 +35,7 @@ export interface HexCell {
   owner: EmpireId;
 
   harvested?: number;
+  road?: boolean;
   building: Building | null;
 }
 

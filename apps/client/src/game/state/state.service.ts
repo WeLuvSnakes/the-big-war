@@ -17,6 +17,7 @@ export function createBaseState(config: GameConfig, grid: HexGrid, empires: Empi
     index: createWorldIndex(grid, config.biomes),
     empires,
     offensives: [],
+    walkers: [],
     nextOffensiveId: 1,
     ships: [],
     nextShipId: 1,

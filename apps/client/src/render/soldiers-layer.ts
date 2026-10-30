@@ -53,7 +53,10 @@ export class SoldiersLayer {
         if (detail) this.drawWave(offensive, hexSize, state.elapsed, range);
         else this.drawFarWave(offensive, hexSize, tilePx, range);
       }
-      if (detail) this.drawGatherers(hexSize, state.elapsed, range);
+      if (detail) {
+        this.drawGatherers(hexSize, state.elapsed, range);
+        this.drawWalkers(state, hexSize, range);
+      }
     }
     for (let i = this.used; i < this.pool.length; i++) this.pool[i]!.visible = false;
     for (let i = this.labelsUsed; i < this.labels.length; i++) this.labels[i]!.visible = false;
@@ -219,6 +222,23 @@ export class SoldiersLayer {
         sprite.zIndex = sprite.position.y;
       });
     }
+  }
+
+  private drawWalkers(state: GameState, hexSize: number, range: HexRange): void {
+    const pixel = (hexSize * GATHERER_SCALE) / SOLDIER_SIZE;
+    state.walkers.forEach((walker, i) => {
+      if (!inRange(walker.pos, range)) return;
+      const phase = state.elapsed + i * 0.29;
+      let frame: SoldierFrame;
+      if (walker.phase === 'building') frame = Math.floor(phase / ATTACK_CYCLE) % 2 === 0 ? 'windup' : 'strike';
+      else frame = Math.floor(phase / (MARCH_CYCLE / 2)) % 2 === 0 ? 'step' : 'idle';
+      const at = axialToPixel(walker.pos, hexSize);
+      const sprite = this.acquire();
+      sprite.texture = this.texture(ownerColor(walker.empire), frame);
+      sprite.scale.set(pixel, pixel);
+      sprite.position.set(at.x, at.y + hexSize * 0.3);
+      sprite.zIndex = sprite.position.y;
+    });
   }
 
   private acquire(): Sprite {
