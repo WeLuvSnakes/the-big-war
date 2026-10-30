@@ -6,7 +6,7 @@ import type { OfferPromptsProps } from './OfferPrompts.types';
 import { FaCheck, FaTimes } from '@the-big-war/frontend/ui/icons/icons';
 import { pendingOffersTo } from '../../game/diplomacy/diplomacy.service';
 import type { PendingOffer } from '../../game/diplomacy/diplomacy.types';
-import { gameStore, live as tracked } from '../../game/store/store.service';
+import { gameStore, live as tracked, whenSettled } from '../../game/store/store.service';
 
 export type { OfferPromptsProps };
 
@@ -16,8 +16,9 @@ export const OfferPrompts = (props: OfferPromptsProps) => {
   const offers = () => pendingOffersTo(live(), live().playerEmpire);
 
   const respond = (offer: PendingOffer, accept: boolean) => {
-    const result = store.dispatch({ type: 'RespondOffer', empire: offer.to, from: offer.from, accept });
-    if (!result.ok) props.controllers?.notice(result.reason);
+    whenSettled(store.dispatch({ type: 'RespondOffer', empire: offer.to, from: offer.from, accept }), result => {
+      if (!result.ok) props.controllers?.notice(result.reason);
+    });
   };
 
   return (

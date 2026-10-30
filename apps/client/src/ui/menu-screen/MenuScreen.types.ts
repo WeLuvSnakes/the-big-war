@@ -1,3 +1,4 @@
+import type { JSX } from 'solid-js';
 import type { MatchSettings } from '../../session/flow';
 
 export interface MenuScreenProps {
@@ -12,12 +13,26 @@ export interface MenuScreenProps {
   readonly onStart: () => void;
 }
 
-export interface SegmentProps<T extends string | number> {
-  readonly label: string;
-  readonly options: readonly T[];
-  readonly value: T;
-  readonly render: (option: T) => string;
-  readonly onSelect: (option: T) => void;
+export interface MapPreviewProps {
+  readonly settings: MatchSettings;
+  readonly class: string;
 }
 
-export type PickTarget = number | 'new';
+export type MenuDropdown = 'nation' | 'rivals' | 'difficulty' | 'neutral';
+
+export interface DropdownProps {
+  readonly class: string;
+  readonly open: boolean;
+  readonly label: string;
+  readonly trigger: JSX.Element;
+  readonly onToggle: (open: boolean) => void;
+  readonly children: JSX.Element;
+}
+
+export interface OptionListProps<T extends string | number> {
+  readonly options: readonly T[];
+  readonly value: T;
+  readonly title: (option: T) => string;
+  readonly hint: (option: T) => string;
+  readonly onSelect: (option: T) => void;
+}

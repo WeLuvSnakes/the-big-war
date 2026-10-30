@@ -58,10 +58,6 @@
   color: var(--street-accent);
 }
 
-.army-vs {
-  color: var(--street-muted);
-}
-
 .army-sub,
 .army-empty {
   font-size: 9px;
@@ -88,68 +84,4 @@
 .army-retreat:hover {
   border-color: var(--street-danger);
   color: var(--street-danger);
-}
-
-.army-bar {
-  height: 3px;
-  background: var(--street-border);
-}
-
-.army-bar-fill {
-  height: 100%;
-  background: var(--street-accent);
-  transition: width 200ms;
-}
-
-.army-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-
-.army-modes {
-  display: flex;
-  margin-right: auto;
-  border: 1px solid var(--street-border);
-}
-
-.army-mode {
-  padding: 2px 6px;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-size: 9px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--street-muted);
-  cursor: pointer;
-}
-
-.army-mode + .army-mode {
-  border-left: 1px solid var(--street-border);
-}
-
-.army-mode:hover {
-  color: var(--street-text);
-}
-
-.army-mode.is-active {
-  background: var(--street-accent-dim);
-  color: var(--street-accent);
-}
-
-.army-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 5px;
-  font-size: 9px;
-  border: 1px solid var(--street-border);
-  color: var(--street-text);
-}
-
-.army-chip-icon {
-  font-size: 8px;
-  color: var(--street-accent);
 }

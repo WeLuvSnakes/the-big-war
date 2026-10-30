@@ -1,5 +1,6 @@
 import type { Accessor } from 'solid-js';
-import type { GameStore } from '../game/store/store.types';
+import type { ShipId } from '../game/ship/ship.types';
+import type { ClientStore } from '../game/store/store.types';
 import type { BuildingKind } from '../game/building/building.types';
 import type { CommandError } from '../game/commands/commands.types';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
@@ -21,8 +22,10 @@ export interface Controllers {
   readonly tool: Accessor<Tool>;
   readonly troopPercent: Accessor<number>;
   readonly notices: Accessor<readonly CommandNotice[]>;
+  readonly selectedShip: Accessor<ShipId | null>;
 
   selectHex(hex: Axial | null): void;
+  selectShip(ship: ShipId | null): void;
   setHover(hex: Axial | null): void;
   setTroopPercent(percent: number): void;
   setTool(tool: Tool): void;
@@ -44,7 +47,7 @@ export interface Controllers {
 }
 
 export interface ControllerDeps {
-  readonly store: GameStore;
+  readonly store: ClientStore;
   
   readonly viewport: () => Pixel;
   
@@ -52,7 +55,7 @@ export interface ControllerDeps {
 
   readonly clientToHex: (at: Pixel) => Axial | null;
   
-  readonly onTroopsSent?: (from: Axial, target: Axial) => void;
+  readonly onTroopsSent?: (target: Axial) => void;
   
   readonly onToolChanged?: (tool: Tool) => void;
 }

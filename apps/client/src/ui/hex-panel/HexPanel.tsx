@@ -7,13 +7,15 @@ import { buildingLabel, terrainLabel } from '../text';
 import type { HexPanelProps } from './HexPanel.types';
 import { Bar } from '@the-big-war/frontend/ui/bar/Bar';
 import { Panel } from '@the-big-war/frontend/ui/panel/Panel';
-import { gameStore, live } from '../../game/store/store.service';
-import type { ModifierLine } from '../../game/front/front.types';
+import { hasUnlock } from '../../game/research/research.service';
 import type { Building } from '../../game/building/building.types';
+import { isMannedMachineGun } from '../../game/trench/trench.service';
+import { boatsFrom, portBoatLimit } from '../../game/ship/ship.service';
 import { RESEARCH_BY_ID } from '../../game/research/research.constants';
-import { defendersOn, isMannedMachineGun } from '../../game/trench/trench.service';
-import { barracksTier, nextBarracksTier, upgradeError } from '../../game/building/building.service';
+import type { ModifierLine } from '../../game/offensive/offensive.types';
+import { gameStore, live, whenSettled } from '../../game/store/store.service';
 import { distance, gridAt, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { barracksTier, nextBarracksTier, portUpgradeCost, upgradeError } from '../../game/building/building.service';
 
 export type { HexPanelProps };
 
@@ -64,17 +66,6 @@ export const HexPanel = (props: HexPanelProps) => {
     return current && current.owner >= 0 ? store.state.empires[current.owner] : null;
   };
   
-  const front = () => {
-    const selected = hex();
-    if (!selected) return null;
-    return (
-      store.state.fronts.find(
-        entry =>
-          (entry.hexA.q === selected.q && entry.hexA.r === selected.r) ||
-          (entry.hexB.q === selected.q && entry.hexB.r === selected.r),
-      ) ?? null
-    );
-  };
   const attackFrom = () => {
     const selected = hex();
     if (!selected) return null;
@@ -106,8 +97,21 @@ export const HexPanel = (props: HexPanelProps) => {
   const upgrade = () => {
     const selected = hex();
     if (!selected) return;
-    const result = store.dispatch({ type: 'UpgradeBuilding', empire: player(), hex: selected });
-    if (!result.ok) props.controllers.notice(result.reason);
+    whenSettled(store.dispatch({ type: 'UpgradeBuilding', empire: player(), hex: selected }), result => {
+      if (!result.ok) props.controllers.notice(result.reason);
+    });
+  };
+
+  const ownPort = live(() => {
+    const current = building();
+    return current?.kind === 'port' && isOwn() && current.buildRemaining <= 0 ? current : null;
+  });
+  const buildShip = () => {
+    const selected = hex();
+    if (!selected) return;
+    whenSettled(store.dispatch({ type: 'BuildShip', empire: player(), hex: selected }), result => {
+      if (!result.ok) props.controllers.notice(result.reason);
+    });
   };
 
   const demolish = () => {
@@ -128,14 +132,10 @@ export const HexPanel = (props: HexPanelProps) => {
     const current = building();
     return current && current.kind === 'trench' && isOwn() && current.buildRemaining <= 0 ? current : null;
   };
-  const trenchDefenders = () => {
-    const current = cell();
-    return current ? defendersOn(store.state, current) : 0;
-  };
   const machineGunStatus = () => {
     const current = cell();
     if (!current?.building?.machineGun) return 'None';
-    return isMannedMachineGun(store.state, current) ? 'Manned' : 'Unmanned';
+    return isMannedMachineGun(current) ? 'Manned' : 'Unmanned';
   };
   const trenchTargets = () => {
     const selected = hex();
@@ -148,8 +148,9 @@ export const HexPanel = (props: HexPanelProps) => {
   const orderTrench = (type: 'ManTrench' | 'LeaveTrench', percent: number) => {
     const selected = hex();
     if (!selected) return;
-    const result = store.dispatch({ type, empire: player(), hex: selected, percent });
-    if (!result.ok) props.controllers.notice(result.reason);
+    whenSettled(store.dispatch({ type, empire: player(), hex: selected, percent }), result => {
+      if (!result.ok) props.controllers.notice(result.reason);
+    });
   };
   const startTrenchAttack = () => {
     const selected = hex();
@@ -235,6 +236,25 @@ export const HexPanel = (props: HexPanelProps) => {
                         </div>
                       )}
                     </Show>
+                    <Show when={ownPort()}>
+                      {port => (
+                        <div class="kit-col">
+                          <span class="kit-note kit-num">
+                            Boats at sea {boatsFrom(store.state, port().id)} / {portBoatLimit(store.state, port())}
+                          </span>
+                          <button type="button" class="kit-button" disabled={upgradeBlocker() !== null} onClick={upgrade}>
+                            Upgrade port · {portUpgradeCost(store.state, port())} Gold
+                          </button>
+                          <Show when={hasUnlock(store.state.empires[player()]!, 'ship:battleship')}>
+                            <button type="button" class="kit-button" disabled={port().shipBuild > 0} onClick={buildShip}>
+                              {port().shipBuild > 0
+                                ? `Building ship ${Math.ceil(port().shipBuild)}s`
+                                : `Build battleship · ${store.state.config.ship.battleshipCost} Gold`}
+                            </button>
+                          </Show>
+                        </div>
+                      )}
+                    </Show>
                     <Show
                       when={confirmDemolish()}
                       fallback={
@@ -270,9 +290,6 @@ export const HexPanel = (props: HexPanelProps) => {
                     value={`${Math.floor(entry().garrison)} / ${store.state.config.trench.capacity}`}
                     variant="accent"
                   />
-                  <Show when={trenchDefenders() > 0}>
-                    <span class="kit-note kit-num">Manning the line: {Math.floor(trenchDefenders())}</span>
-                  </Show>
                   <span class="kit-note">Machine gun: {machineGunStatus()}</span>
                   <div class="kit-row">
                     <button
@@ -313,40 +330,6 @@ export const HexPanel = (props: HexPanelProps) => {
                   variant="danger"
                 />
               </div>
-            </Show>
-
-            <Show when={front()}>
-              {entry => (
-                <div class="kit-col">
-                  <span class="street-label">Front</span>
-                  <Bar
-                    label={store.state.empires[entry().sideA.empire]?.name ?? ''}
-                    ratio={
-                      entry().sideA.troops /
-                      Math.max(1, entry().sideA.troops + entry().sideB.troops)
-                    }
-                    value={Math.floor(entry().sideA.troops)}
-                    variant="accent"
-                  />
-                  <Bar
-                    label={store.state.empires[entry().sideB.empire]?.name ?? ''}
-                    ratio={
-                      entry().sideB.troops /
-                      Math.max(1, entry().sideA.troops + entry().sideB.troops)
-                    }
-                    value={Math.floor(entry().sideB.troops)}
-                    variant="danger"
-                  />
-                  <Show when={entry().resolution}>
-                    {resolution => (
-                      <span class="kit-note kit-num">
-                        Losses: {Math.floor(resolution().lossesA)} /{' '}
-                        {Math.floor(resolution().lossesB)}
-                      </span>
-                    )}
-                  </Show>
-                </div>
-              )}
             </Show>
 
             <Show when={isOwn()}>

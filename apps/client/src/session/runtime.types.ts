@@ -1,11 +1,11 @@
 import type { Accessor } from 'solid-js';
 import type { Controllers } from './controllers';
 import type { WorldRenderer } from '../render/world';
-import type { GameStore } from '../game/store/store.types';
+import type { ClientStore } from '../game/store/store.types';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 
 export interface MatchRuntimeOptions {
-  readonly store: GameStore;
+  readonly store: ClientStore;
   readonly world: WorldRenderer;
   
   readonly host: HTMLElement;
@@ -16,6 +16,12 @@ export interface MatchRuntime {
   readonly controllers: Controllers;
 
   readonly cameraMoved: Accessor<boolean>;
+
+  readonly choosingSpawn: Accessor<boolean>;
+
+  beginSpawnChoice(): void;
+
+  confirmSpawn(): void;
   
   start(): void;
   

@@ -3,7 +3,6 @@ import { buildingLabel } from '../text';
 import { buildingGlyph } from './building-glyph';
 import type { HotbarProps } from './Hotbar.types';
 import { createSignal, For, Show } from 'solid-js';
-import { useEvent } from '@the-big-war/frontend/ui/hooks/hooks';
 import { classes } from '@the-big-war/frontend/ui/format/format';
 import { gameStore, live } from '../../game/store/store.service';
 import { hasUnlock } from '../../game/research/research.service';
@@ -75,14 +74,6 @@ export const Hotbar = (props: HotbarProps) => {
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
-
-  useEvent(window, 'keydown', event => {
-    const target = event.target as HTMLElement | null;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-    const index = Number(event.key) - 1;
-    const kind = placeable()[index];
-    if (Number.isInteger(index) && kind) select(kind);
-  });
 
   return (
     <div class="hud-hotbar street-tray kit-glass">

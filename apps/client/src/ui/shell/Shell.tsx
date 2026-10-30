@@ -6,6 +6,7 @@ import { errorLabel } from '../text';
 import { Hotbar } from '../hotbar/Hotbar';
 import { AboutView } from '../about/AboutView';
 import { VOID_COLOR } from '../../render/theme';
+import { HexPanel } from '../hex-panel/HexPanel';
 import { audio } from '../../audio/audio.service';
 import { ArmyPanel } from '../army-panel/ArmyPanel';
 import { EndScreen } from '../end-screen/EndScreen';
@@ -27,6 +28,7 @@ import type { BuildingKind } from '../../game/building/building.types';
 import { pendingOffersTo } from '../../game/diplomacy/diplomacy.service';
 import { createAttractMode, type AttractMode } from '../../session/attract';
 import { createMatchRuntime, type MatchRuntime } from '../../session/runtime';
+import { gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { createEffect, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { DEFAULT_PLAYER_NAME, configFromSettings, createMatchFlow } from '../../session/flow';
 import { FaBook, FaFlag, FaHammer, FaCrosshairs, FaAtom, FaSignOutAlt, FaMusic, FaVolumeUp } from '@the-big-war/frontend/ui/icons/icons';
@@ -86,9 +88,21 @@ export const Shell = () => {
     }
   });
 
+  const [starting, setStarting] = createSignal(false);
   const startMatch = async () => {
+    if (starting()) return;
+    setStarting(true);
+    try {
+      await launchMatch();
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const launchMatch = async () => {
     const settings = flow.settings();
-    store.startMatch(configFromSettings(settings, flow.playerName().trim() || DEFAULT_PLAYER_NAME));
+    const config = configFromSettings(settings, flow.playerName().trim() || DEFAULT_PLAYER_NAME);
+    await store.startMatch({ ...config, start: { ...config.start, pickSpawns: true } });
     assignNationColors(store.state);
 
     store.dispatch({
@@ -117,6 +131,7 @@ export const Shell = () => {
     });
     setRuntime(next);
     next.fillScreenFromLeft();
+    next.beginSpawnChoice();
     next.start();
   };
 
@@ -134,7 +149,14 @@ export const Shell = () => {
   };
   const closePanel = (id: Exclude<PanelId, null>) => () => setPanel(current => (current === id ? null : current));
 
+  const activeWaves = live(() => store.state.offensives.filter(item => item.empire === store.state.playerEmpire).length);
   const pendingOfferCount = live(() => pendingOffersTo(store.state, store.state.playerEmpire).length);
+
+  const ownPortSelected = live(() => {
+    const hex = runtime()?.controllers.selectedHex();
+    const cell = hex ? gridAt(store.state.grid, hex) : null;
+    return cell?.owner === store.state.playerEmpire && cell.building?.kind === 'port';
+  });
 
   const showingMatch = () => flow.screen() === 'match' || flow.screen() === 'end';
 
@@ -164,8 +186,21 @@ export const Shell = () => {
         />
       </Show>
 
+      <Show when={starting()}>
+        <div class="match-loading" role="status">
+          <span class="match-loading-mark" />
+          Charting the world
+        </div>
+      </Show>
+
       <Show when={showingMatch()}>
         <Hud controllers={runtime()?.controllers} />
+
+        <Show when={runtime()?.choosingSpawn()}>
+          <div class="spawn-bar" role="status">
+            <span>Click land to claim your first 4x4 and start the war</span>
+          </div>
+        </Show>
 
         <Rail
           label="The Big War"
@@ -189,7 +224,7 @@ export const Shell = () => {
             label="Combat"
             icon={<FaCrosshairs />}
             active={panel() === 'army'}
-            badge={store.state.fronts.length}
+            badge={activeWaves()}
             badgeAccent
             onClick={() => togglePanel('army')}
           />
@@ -206,8 +241,6 @@ export const Shell = () => {
             onClick={() => togglePanel('wiki')}
           />
           <div class="rail-divider rail-bottom">
-            <RailAction label="Music" icon={<FaMusic />} active={audio.musicOn()} onClick={() => audio.toggleMusic()} />
-            <RailAction label="Sound" icon={<FaVolumeUp />} active={audio.sfxOn()} onClick={() => audio.toggleSfx()} />
             <RailAction label="Menu" icon={<FaSignOutAlt />} danger onClick={() => backToMenu()} />
           </div>
         </Rail>
@@ -229,6 +262,9 @@ export const Shell = () => {
         </Show>
         <Show when={panel() === 'wiki'}>
           <WikiPanel focus={wikiFocus()} onClose={closePanel('wiki')} />
+        </Show>
+        <Show when={ownPortSelected() && runtime()}>
+          {active => <HexPanel controllers={active().controllers} onClose={() => active().controllers.selectHex(null)} />}
         </Show>
         <Show when={runtime()}>
           {active => (

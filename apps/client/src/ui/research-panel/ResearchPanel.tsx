@@ -34,8 +34,8 @@ const MODIFIER_META: Record<ModifierKey, { readonly icon: typeof FaWallet; reado
   defence: { icon: FaShieldAlt, label: 'Defence' },
   reserveCap: { icon: FaUsers, label: 'Reserve cap' },
   recruitSpeed: { icon: FaBolt, label: 'Recruit speed' },
-  frontAttack: { icon: FaFlag, label: 'Front attack' },
-  frontDefence: { icon: FaShieldAlt, label: 'Front defence' },
+  frontAttack: { icon: FaFlag, label: 'Wave attack' },
+  frontDefence: { icon: FaShieldAlt, label: 'Wave defence' },
 };
 
 function modifierValue(modifier: Modifier): string {

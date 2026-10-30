@@ -21,3 +21,60 @@
 .audio-toggles button[aria-pressed='true'] {
   opacity: 1;
 }
+
+.match-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 18px;
+}
+
+.match-loading-mark {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: match-loading-turn 0.9s linear infinite;
+}
+
+@keyframes match-loading-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spawn-bar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  white-space: nowrap;
+  font-family: var(--street-font);
+  color: var(--street-text);
+  background: var(--street-solid);
+  border: 2px solid var(--street-accent);
+  transform: translateX(-50%);
+}
+.spawn-bar button {
+  appearance: none;
+  min-height: 34px;
+  padding: 0 12px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--street-solid);
+  cursor: pointer;
+  background: var(--street-accent);
+  border: 0;
+}

@@ -3,9 +3,12 @@ import { clampPercent } from '@the-big-war/game-engine/math/math.service';
 
 
 import { createSignal } from 'solid-js';
-import type { FrontId } from '../game/front/front.types';
+import type { ShipId } from '../game/ship/ship.types';
+import { isClaimable } from '../game/map/terrain.service';
+import { whenSettled } from '../game/store/store.service';
 import type { EmpireId } from '../game/empire/empire.types';
-import { nearestOwnedHex } from '../game/troops/troops.service';
+import { isNavigable } from '../game/ship/sea-route.service';
+import { shipById, shipsNear } from '../game/ship/ship.service';
 import type { BuildingKind } from '../game/building/building.types';
 import type { CommandError } from '../game/commands/commands.types';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
@@ -15,11 +18,13 @@ import type {
   Controllers,
   Tool,
 } from './controllers.types';
-import { distance, gridAt, neighbors, pixelToHex } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { distance, gridAt, gridIndex, pixelToHex } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 export type * from './controllers.types';
 
 let noticeId = 0;
+
+const SHIP_TAP_RADIUS = 1;
 
 export function createControllers(deps: ControllerDeps): Controllers {
   const { store } = deps;
@@ -27,6 +32,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
   const [hoverHex, setHoverHex] = createSignal<Axial | null>(null);
   const [tool, setToolSignal] = createSignal<Tool>({ kind: 'idle' });
   const [troopPercent, setTroopPercentSignal] = createSignal(50);
+  const [selectedShip, setSelectedShip] = createSignal<ShipId | null>(null);
   const [notices, setNotices] = createSignal<readonly CommandNotice[]>([]);
 
   const state = () => store.state;
@@ -34,6 +40,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
 
   const noticeTimers = new Map<CommandError, ReturnType<typeof setTimeout>>();
   const notice = (reason: CommandError) => {
+    if (reason === 'stale_match') return;
     audio.play('error');
     const pending = noticeTimers.get(reason);
     if (pending) clearTimeout(pending);
@@ -61,43 +68,27 @@ export function createControllers(deps: ControllerDeps): Controllers {
   const own = (hex: Axial): boolean => gridAt(state().grid, hex)?.owner === player();
   const foreign = (hex: Axial): boolean => {
     const cell = gridAt(state().grid, hex);
-    return !!cell && cell.owner !== player();
-  };
-
-  const attackFromFor = (target: Axial): Axial | null => {
-    for (const candidate of neighbors(target)) {
-      if (gridAt(state().grid, candidate)?.owner === player()) return candidate;
-    }
-    return null;
+    return !!cell && cell.owner !== player() && isClaimable(cell.terrain);
   };
 
   const sendTroops = (target: Axial) => {
-    const from = attackFromFor(target) ?? nearestOwnedHex(state(), player(), target);
-    if (!from) {
-      notice('invalid_target');
-      return;
-    }
-    const result = store.dispatch({
-      type: 'SendTroops',
-      empire: player(),
-      hex: from,
-      target,
-      percent: troopPercent(),
-      intent: 'attack',
+    whenSettled(store.dispatch({ type: 'SendTroops', empire: player(), target, percent: troopPercent() }), result => {
+      if (result.ok) deps.onTroopsSent?.(target);
+      else notice(result.reason);
     });
-    if (result.ok) deps.onTroopsSent?.(from, target);
-    else notice(result.reason);
   };
 
   const placeBuilding = (hex: Axial, building: BuildingKind) => {
-    const result = store.dispatch({ type: 'PlaceBuilding', empire: player(), hex, kind: building });
-    if (!result.ok) notice(result.reason);
+    whenSettled(store.dispatch({ type: 'PlaceBuilding', empire: player(), hex, kind: building }), result => {
+      if (!result.ok) notice(result.reason);
+    });
   };
 
   const fireCannon = (from: Axial, target: Axial) => {
-    const result = store.dispatch({ type: 'FireCannon', empire: player(), from, target });
-    if (result.ok) setToolSignal({ kind: 'idle' });
-    else notice(result.reason);
+    whenSettled(store.dispatch({ type: 'FireCannon', empire: player(), from, target }), result => {
+      if (result.ok) setToolSignal({ kind: 'idle' });
+      else notice(result.reason);
+    });
   };
 
   const trenchAttack = (from: Axial, target: Axial) => {
@@ -105,13 +96,35 @@ export function createControllers(deps: ControllerDeps): Controllers {
       notice('invalid_target');
       return;
     }
-    const result = store.dispatch({ type: 'TrenchAttack', empire: player(), hex: from, target, percent: troopPercent() });
-    if (!result.ok) {
-      notice(result.reason);
-      return;
+    whenSettled(store.dispatch({ type: 'TrenchAttack', empire: player(), hex: from, target, percent: troopPercent() }), result => {
+      if (!result.ok) {
+        notice(result.reason);
+        return;
+      }
+      deps.onTroopsSent?.(target);
+      setTool({ kind: 'idle' });
+    });
+  };
+
+  const tapShip = (hex: Axial): boolean => {
+    const onBuilding = !!gridAt(state().grid, hex)?.building;
+    const ship = onBuilding
+      ? undefined
+      : shipsNear(state(), hex, SHIP_TAP_RADIUS).find(item => item.empire === player() && item.kind === 'battleship');
+    if (ship) {
+      setSelectedShip(ship.id);
+      return true;
     }
-    deps.onTroopsSent?.(from, target);
-    setTool({ kind: 'idle' });
+    const selected = selectedShip();
+    if (selected === null) return false;
+    setSelectedShip(null);
+    if (!shipById(state(), selected)) return false;
+    if (!isNavigable(state().map, gridIndex(state().grid, hex.q, hex.r))) return false;
+    whenSettled(store.dispatch({ type: 'OrderShip', empire: player(), ship: selected, target: hex }), result => {
+      if (result.ok) setSelectedShip(selected);
+      else notice(result.reason);
+    });
+    return true;
   };
 
   const selectHex = (hex: Axial | null) => {
@@ -125,7 +138,10 @@ export function createControllers(deps: ControllerDeps): Controllers {
 
   const cancelTool = () => {
     if (tool().kind !== 'idle') setTool({ kind: 'idle' });
-    else setSelectedHex(null);
+    else {
+      setSelectedHex(null);
+      setSelectedShip(null);
+    }
   };
 
   const tap = (at: Pixel) => {
@@ -152,6 +168,8 @@ export function createControllers(deps: ControllerDeps): Controllers {
       trenchAttack(active.from, hex);
       return;
     }
+
+    if (tapShip(hex)) return;
 
     if (own(hex)) {
       selectHex(hex);
@@ -190,7 +208,9 @@ export function createControllers(deps: ControllerDeps): Controllers {
     tool,
     troopPercent,
     notices,
+    selectedShip,
     selectHex,
+    selectShip: setSelectedShip,
     setHover: setHoverHex,
     setTroopPercent: percent => setTroopPercentSignal(clampPercent(percent)),
     setTool,
@@ -208,16 +228,6 @@ export function createControllers(deps: ControllerDeps): Controllers {
     notice,
     dismissNotice,
   };
-}
-
-export function frontsTouching(state: { readonly fronts: readonly { readonly id: FrontId; readonly hexA: Axial; readonly hexB: Axial }[] }, hex: Axial): FrontId[] {
-  return state.fronts
-    .filter(
-      front =>
-        (front.hexA.q === hex.q && front.hexA.r === hex.r) ||
-        (front.hexB.q === hex.q && front.hexB.r === hex.r),
-    )
-    .map(front => front.id);
 }
 
 export { pixelToHex };

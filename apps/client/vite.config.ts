@@ -25,6 +25,7 @@ export default defineConfig({
       { find: /^@the-big-war\/frontend\//, replacement: `${libs}frontend/src/` },
     ],
   },
+  worker: { format: 'es' },
   css: {
     transformer: 'lightningcss',
   },

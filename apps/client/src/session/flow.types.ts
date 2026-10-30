@@ -1,8 +1,9 @@
 import type { Accessor } from 'solid-js';
+import type { MapPreset } from '../game/map/map.types';
 
 export type Screen = 'menu' | 'match' | 'end';
 
-export type MapSize = 'small' | 'medium' | 'large';
+export type MapSize = 'skirmish' | 'regional' | 'continental' | 'world';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -11,6 +12,7 @@ export type NeutralStates = 'none' | 'few' | 'many';
 export interface MatchSettings {
   readonly bots: readonly string[];
   readonly mapSize: MapSize;
+  readonly preset: MapPreset;
   readonly difficulty: Difficulty;
   readonly neutralStates: NeutralStates;
   readonly seed: number;

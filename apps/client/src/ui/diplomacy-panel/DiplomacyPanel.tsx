@@ -3,7 +3,7 @@ import { For, Show } from 'solid-js';
 import { Panel } from '@the-big-war/frontend/ui/panel/Panel';
 import type { Empire } from '../../game/empire/empire.types';
 import type { DiplomacyPanelProps } from './DiplomacyPanel.types';
-import { gameStore, live as tracked } from '../../game/store/store.service';
+import { gameStore, live as tracked, whenSettled } from '../../game/store/store.service';
 import { getRelation, offerCooldown, pendingOffer, treatySecondsLeft } from '../../game/diplomacy/diplomacy.service';
 
 export type { DiplomacyPanelProps };
@@ -26,10 +26,12 @@ export const DiplomacyPanel = (props: DiplomacyPanelProps) => {
   };
 
   const toggle = (empire: Empire) => {
-    const result = offersPeace(empire)
+    const reply = offersPeace(empire)
       ? store.dispatch({ type: 'RespondOffer', empire: player(), from: empire.id, accept: true })
       : store.dispatch({ type: atWar(empire) ? 'OfferPeace' : 'DeclareWar', empire: player(), target: empire.id });
-    if (!result.ok) props.controllers?.notice(result.reason);
+    whenSettled(reply, result => {
+      if (!result.ok) props.controllers?.notice(result.reason);
+    });
   };
 
   return (

@@ -10,6 +10,8 @@ const BUILDING_LABELS: Readonly<Record<BuildingKind, string>> = {
   miner: 'Miner',
   farm: 'Farm',
   lab: 'Lab',
+  port: 'Port',
+  fishery: 'Fishery',
   barracks: 'Barracks',
   fort: 'Fort',
   cannon: 'Cannon',
@@ -31,12 +33,14 @@ const BUILDING_DESCRIPTIONS: Readonly<Record<BuildingKind, string>> = {
   miner: 'Workers walk to the nearest ore deposit in your territory and haul back ore worth far more than wood. Ore is rare, so fight for it.',
   farm: 'Speeds up population growth. Each farm adds more, up to a cap.',
   lab: 'Produces science for research, plus a little gold.',
+  port: 'Coast only. Launches troop transports at land you cannot reach on foot, sends trade ships to friendly ports and builds battleships once researched. Upgrade it for more boats at sea. An enemy battleship nearby with no escort of yours blockades it.',
+  fishery: 'Coast only. A cheap steady gold income, no fleet needed.',
   barracks: 'Trains troops, raises how many you can hold in reserve and lets you attack from nearby hexes. Upgrade it to level II (Grenadiers) and III (Machine Gunners) once researched: better troops hit harder but train slower and cost more gold each.',
   fort: 'Troops within its radius fight 50% more effectively.',
   cannon: 'Fires at distant hexes to damage defenders and clear forests and blast passes through mountains. Needs a reload between shots. Unlocked through research.',
-  trench: 'Dug into the ground and links up with neighbouring trenches. Click it to station up to 20 troops, who man the line when attacked and defend 35% better. You can also attack straight out of it. Enemy tanks within 2 hexes cancel the bonus.',
-  machine_gun: 'Mounted in one of your trenches. While the trench is manned, troops holding the line within 2 hexes hit attackers 50% harder and defend 20% better. No effect while attacking. Unlocked through research.',
-  battery: 'Shells the most crowded enemy front in range on its own, with no gold per shot. Unlocked through research.',
+  trench: 'Dug into the ground and links up with neighbouring trenches. Click it to station up to 20 troops, who slow attackers down and defend 35% better. You can also attack straight out of it. Enemy tanks within 2 hexes cancel the bonus.',
+  machine_gun: 'Mounted in one of your trenches. While the trench is manned, land within 2 hexes defends 20% better. Unlocked through research.',
+  battery: 'Shells the strongest enemy attack in range on its own, with no gold per shot. Unlocked through research.',
   bunker: 'Troops on this hex and the hexes beside it defend 75% better and take half damage from shelling. Unlocked through research.',
   tank: 'Attacks into hexes within 2 of it are 60% stronger and ignore enemy trenches. When your troops take a hex next to it, the tank rolls forward onto it. Unlocked through research.',
 };
@@ -55,6 +59,7 @@ const TERRAIN_LABELS: Readonly<Record<Terrain, string>> = {
   forest: 'Forest',
   mountain: 'Mountain',
   ore: 'Ore',
+  water: 'Water',
 };
 
 export function terrainLabel(terrain: Terrain): string {
@@ -81,6 +86,11 @@ const ERROR_LABELS: Readonly<Record<CommandError, string>> = {
   offer_cooldown: 'Offer recently rejected',
   offer_pending: 'Offer awaiting a reply',
   offer_missing: 'Offer no longer stands',
+  no_port: 'Build a port first: that land is overseas',
+  port_busy: 'All boats from your port are at sea',
+  blockaded: 'Port is blockaded',
+  no_sea_route: 'No sea route from your ports',
+  stale_match: 'That order belonged to the last match',
 };
 
 export function errorLabel(reason: CommandError): string {
