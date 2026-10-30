@@ -1,4 +1,6 @@
 import { testEmpire, clearStaging } from '../support/fixture';
+import { labelWorld } from '@the-big-war/client/game/map/world-labels.service';
+import { createWorldIndex, setBuilding, setOwner } from '@the-big-war/client/game/map/world-index.service';
 
 
 import { describe, expect, test } from 'bun:test';
@@ -13,12 +15,10 @@ import type { Command } from '@the-big-war/client/game/commands/commands.types';
 import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants';
 import { completeResearch } from '@the-big-war/client/game/research/research.service';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
-import { stepColumns } from '@the-big-war/client/game/simulation/systems/columns.system';
 import { gridAt, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { stepBuildings } from '@the-big-war/client/game/simulation/systems/buildings.system';
-import { stepExpansion } from '@the-big-war/client/game/simulation/systems/expansion.system';
 import type { Building, BuildingKind } from '@the-big-war/client/game/building/building.types';
-import { buildingCost, placementError } from '@the-big-war/client/game/building/building.service';
+import { buildingCost, createBuilding, placementError } from '@the-big-war/client/game/building/building.service';
 
 const FACTION_IDS = FACTIONS.map(faction => faction.id);
 
@@ -36,6 +36,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
     q: hex.q,
     r: hex.r,
     terrain: 'plain',
+    biome: 'temperate',
     owner: NEUTRAL_OWNER,
     building: null,
   }));
@@ -48,11 +49,17 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
     status: 'playing',
     playerEmpire: 0,
     grid,
+    index: createWorldIndex(grid),
     empires,
-    fronts: [],
-    expeditions: [],
-    columns: [],
+    offensives: [], walkers: [],
+    ships: [],
+    nextShipId: 1,
+    shipHash: new Map(),
+    tradeClock: 0,
+    nextOffensiveId: 1,
+    spawnSites: [],
     landHexCount: grid.cells.length,
+    map: labelWorld(grid),
     elapsed: 0,
     tick: 0,
     speed: 1,
@@ -66,16 +73,16 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
     agentAccumulator: 0,
   };
   const half = grid.width / 2;
-  for (const cell of grid.cells) cell.owner = cell.q < half ? 0 : 1;
+  for (const cell of grid.cells) setOwner(state, cell, cell.q < half ? 0 : 1);
   for (const empire of empires) {
     const q = empire.id === 0 ? 0 : grid.width - 1;
-    gridAt(grid, { q, r: 0 })!.building = makeBuilding(state, 'city');
+    setBuilding(state, gridAt(grid, { q, r: 0 })!, makeBuilding(state, 'city'));
   }
   return state;
 }
 
 function makeBuilding(state: GameState, kind: BuildingKind, level = 1): Building {
-  return { id: state.nextBuildingId++, kind, level, cooldown: 0, growth: 0, demolishAt: null, buildRemaining: 0, gatherers: [], garrison: 0, machineGun: false };
+  return { id: state.nextBuildingId++, kind, level, cooldown: 0, growth: 0, demolishAt: null, buildRemaining: 0, gatherers: [], garrison: 0, machineGun: false, shipBuild: 0, shellDamage: 0 };
 }
 
 function borderEdge(state: GameState, left: number, right: number): { a: { q: number; r: number }; b: { q: number; r: number } } {
@@ -86,201 +93,6 @@ function borderEdge(state: GameState, left: number, right: number): { a: { q: nu
   }
   throw new Error('no border edge');
 }
-
-describe('SendTroops', () => {
-  test('commits troops from the reserve onto a new front', () => {
-    const state = makeState();
-    clearStaging(state);
-    const edge = borderEdge(state, 0, 1);
-    const result = dispatch(state, {
-      type: 'SendTroops',
-      empire: 0,
-      hex: edge.a,
-      target: edge.b,
-      percent: 50,
-      intent: 'attack',
-    });
-    expect(result.ok).toBe(true);
-    const front = state.fronts[0]!;
-    expect(front.sideA.troops).toBe(50);
-    expect(front.sideA.mode).toBe('attack');
-    expect(state.empires[0]!.soldiers).toBe(50);
-  });
-
-  test('a far target sends a marching column from the nearest owned tile', () => {
-    const state = makeState();
-    const edge = borderEdge(state, 0, 1);
-    const far = { q: edge.b.q, r: edge.b.r === 0 ? 3 : 0 };
-    const result = dispatch(state, {
-      type: 'SendTroops',
-      empire: 0,
-      hex: edge.a,
-      target: far,
-      percent: 50,
-      intent: 'attack',
-    });
-    expect(result.ok).toBe(true);
-    const column = state.columns[0]!;
-    expect(column.path.at(-1)).toEqual(far);
-    expect(gridAt(state.grid, column.path[0]!)!.owner).toBe(0);
-    for (let i = 1; i < column.path.length; i++) {
-      const a = column.path[i - 1]!;
-      const b = column.path[i]!;
-      expect(Math.abs(a.q - b.q) + Math.abs(a.r - b.r)).toBe(1);
-    }
-    expect(state.empires[0]!.soldiers).toBe(50);
-  });
-
-  test('a column claims neutral land along its path toward the target', () => {
-    const state = makeState();
-    for (const cell of state.grid.cells) cell.owner = cell.q === 0 ? 0 : NEUTRAL_OWNER;
-    const target = { q: 6, r: 2 };
-    const result = dispatch(state, { type: 'SendTroops', empire: 0, hex: { q: 0, r: 2 }, target, percent: 50, intent: 'attack' });
-    expect(result.ok).toBe(true);
-    for (let i = 0; i < 300; i++) stepColumns(state, 1 / 30);
-    for (let q = 1; q <= 6; q++) expect(gridAt(state.grid, { q, r: 2 })!.owner).toBe(0);
-    expect(gridAt(state.grid, { q: 1, r: 0 })!.owner).toBe(NEUTRAL_OWNER);
-  });
-
-  test('a mountain is claimed by a column at extra cost and stops there', () => {
-    const state = makeState();
-    clearStaging(state);
-    for (const cell of state.grid.cells) cell.owner = cell.q === 0 ? 0 : NEUTRAL_OWNER;
-    const target = { q: 1, r: 2 };
-    gridAt(state.grid, target)!.terrain = 'mountain';
-    const result = dispatch(state, { type: 'SendTroops', empire: 0, hex: { q: 0, r: 2 }, target, percent: 50, intent: 'attack' });
-    expect(result.ok).toBe(true);
-    for (let i = 0; i < 600; i++) {
-      stepColumns(state, 1 / 30);
-      stepExpansion(state, 1 / 30);
-    }
-    expect(gridAt(state.grid, target)!.owner).toBe(0);
-    expect(gridAt(state.grid, target)!.terrain).toBe('mountain');
-    expect(gridAt(state.grid, { q: 2, r: 2 })!.owner).toBe(NEUTRAL_OWNER);
-    expect(state.empires[0]!.soldiers).toBeCloseTo(100 - 5 * 1.35);
-  });
-
-  test('a column sent to claim wild land stops at another nation and never attacks it', () => {
-    const state = makeState();
-    for (const cell of state.grid.cells) cell.owner = cell.q === 0 ? 0 : NEUTRAL_OWNER;
-    gridAt(state.grid, { q: 3, r: 2 })!.owner = 1;
-    const target = { q: 6, r: 2 };
-    const result = dispatch(state, { type: 'SendTroops', empire: 0, hex: { q: 0, r: 2 }, target, percent: 50, intent: 'attack' });
-    expect(result.ok).toBe(true);
-    for (let i = 0; i < 300; i++) stepColumns(state, 1 / 30);
-    expect(gridAt(state.grid, { q: 3, r: 2 })!.owner).toBe(1);
-    expect(state.fronts).toHaveLength(0);
-    expect(state.columns).toHaveLength(0);
-    expect(state.expeditions).toHaveLength(1);
-  });
-
-  test('rejects a friendly target', () => {
-    const state = makeState();
-    const home = gridAt(state.grid, { q: 0, r: 1 })!;
-    const friend = gridAt(state.grid, { q: 0, r: 2 })!;
-    const result = dispatch(state, {
-      type: 'SendTroops',
-      empire: 0,
-      hex: { q: home.q, r: home.r },
-      target: { q: friend.q, r: friend.r },
-      percent: 50,
-      intent: 'attack',
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('invalid_target');
-  });
-
-  test('rejects a hex the empire does not own', () => {
-    const state = makeState();
-    const edge = borderEdge(state, 0, 1);
-    const result = dispatch(state, {
-      type: 'SendTroops',
-      empire: 1,
-      hex: edge.a,
-      target: edge.b,
-      percent: 50,
-      intent: 'attack',
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('invalid_target');
-  });
-
-  test('rejects an empty reserve with insufficient_troops', () => {
-    const state = makeState();
-    const edge = borderEdge(state, 0, 1);
-    state.empires[0]!.soldiers = 0;
-    const result = dispatch(state, {
-      type: 'SendTroops',
-      empire: 0,
-      hex: edge.a,
-      target: edge.b,
-      percent: 50,
-      intent: 'attack',
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('insufficient_troops');
-  });
-
-  test('rejects an eliminated empire with no_empire', () => {
-    const state = makeState();
-    state.empires[0]!.alive = false;
-    const edge = borderEdge(state, 0, 1);
-    const result = dispatch(state, {
-      type: 'SendTroops',
-      empire: 0,
-      hex: edge.a,
-      target: edge.b,
-      percent: 50,
-      intent: 'attack',
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('no_empire');
-  });
-
-  test('joining an existing front adds to the same side', () => {
-    const state = makeState();
-    clearStaging(state);
-    const edge = borderEdge(state, 0, 1);
-    const send = (percent: number): void => {
-      dispatch(state, { type: 'SendTroops', empire: 0, hex: edge.a, target: edge.b, percent, intent: 'attack' });
-    };
-    send(50); 
-    send(100); 
-    expect(state.fronts.length).toBe(1);
-    expect(state.fronts[0]!.sideA.troops).toBe(100);
-  });
-});
-
-describe('SetFrontMode', () => {
-  test('switches the mode of the empire\u2019s own side', () => {
-    const state = makeState();
-    clearStaging(state);
-    const edge = borderEdge(state, 0, 1);
-    dispatch(state, { type: 'SendTroops', empire: 0, hex: edge.a, target: edge.b, percent: 50, intent: 'attack' });
-    const front = state.fronts[0]!;
-    const result = dispatch(state, { type: 'SetFrontMode', empire: 0, frontId: front.id, mode: 'defence' });
-    expect(result.ok).toBe(true);
-    expect(front.sideA.mode).toBe('defence');
-  });
-
-  test('rejects a front the empire is not part of', () => {
-    const state = makeState();
-    clearStaging(state);
-    const edge = borderEdge(state, 0, 1);
-    dispatch(state, { type: 'SendTroops', empire: 0, hex: edge.a, target: edge.b, percent: 50, intent: 'attack' });
-    const front = state.fronts[0]!;
-    
-    const result = dispatch(state, { type: 'SetFrontMode', empire: 99, frontId: front.id, mode: 'attack' });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('invalid_target');
-  });
-
-  test('rejects an unknown front id', () => {
-    const state = makeState();
-    const result = dispatch(state, { type: 'SetFrontMode', empire: 0, frontId: '0,0|1,0', mode: 'attack' });
-    expect(result.ok).toBe(false);
-  });
-});
 
 describe('PlaceBuilding', () => {
   test('places a market on an owned, spaced, plain hex', () => {
@@ -318,15 +130,16 @@ describe('PlaceBuilding', () => {
     const b = { q: spot.q, r: spot.r };
     expect(dispatch(state, { type: 'PlaceBuilding', empire: 0, hex: b, kind: 'farm' }).ok).toBe(true);
     const farmCost = state.config.buildings.farm.cost;
-    expect(state.empires[0]!.gold).toBeCloseTo(goldBefore - farmCost - farmCost * state.config.economy.buildingCostGrowth, 6);
-    stepBuildings(state, 1);
+    expect(state.empires[0]!.gold).toBeCloseTo(goldBefore - farmCost - farmCost * (1 + state.config.economy.buildingCostStep), 6);
     const spec = state.config.buildings.farm.buildSeconds;
-    expect(gridAt(state.grid, a)!.building!.buildRemaining).toBe(spec - 1);
-    expect(gridAt(state.grid, b)!.building!.buildRemaining).toBe(spec);
-    stepBuildings(state, spec);
-    stepBuildings(state, 1);
-    expect(gridAt(state.grid, a)!.building!.buildRemaining).toBe(0);
-    expect(gridAt(state.grid, b)!.building!.buildRemaining).toBe(spec - 1);
+    const site = gridAt(state.grid, a)!.building!;
+    const next = gridAt(state.grid, b)!.building!;
+    while (site.buildRemaining === spec) stepBuildings(state, 0.1);
+    expect(next.buildRemaining).toBe(spec);
+    while (site.buildRemaining > 0) stepBuildings(state, 0.1);
+    while (next.buildRemaining === spec) stepBuildings(state, 0.1);
+    expect(site.buildRemaining).toBe(0);
+    expect(next.buildRemaining).toBeLessThan(spec);
   });
 
   test('starts a build timer without consuming civilians', () => {
@@ -341,7 +154,7 @@ describe('PlaceBuilding', () => {
     const state = makeState();
     const before = buildingCost(state, 0, 'market');
     dispatch(state, { type: 'PlaceBuilding', empire: 0, hex: { q: 3, r: 2 }, kind: 'market' });
-    expect(buildingCost(state, 0, 'market')).toBeCloseTo(before * state.config.economy.buildingCostGrowth, 6);
+    expect(buildingCost(state, 0, 'market')).toBeCloseTo(before * (1 + state.config.economy.buildingCostStep), 6);
   });
 
   test('rejects a hex owned by someone else', () => {
@@ -445,11 +258,10 @@ describe('PlaceBuilding field works', () => {
 
 describe('Trenches', () => {
   const trenchHex = { q: 4, r: 2 };
-  const enemyHex = { q: 5, r: 2 };
 
   function dug(state: GameState): Building {
     const trench = makeBuilding(state, 'trench');
-    gridAt(state.grid, trenchHex)!.building = trench;
+    setBuilding(state, gridAt(state.grid, trenchHex)!, trench);
     return trench;
   }
 
@@ -504,22 +316,6 @@ describe('Trenches', () => {
     expect(state.empires[0]!.soldiers).toBe(110);
   });
 
-  test('TrenchAttack sends the garrison onto an attacking front', () => {
-    const state = makeState();
-    const trench = dug(state);
-    trench.garrison = 10;
-    const far = dispatch(state, { type: 'TrenchAttack', empire: 0, hex: trenchHex, target: { q: 6, r: 2 }, percent: 50 });
-    expect(far.ok).toBe(false);
-
-    const result = dispatch(state, { type: 'TrenchAttack', empire: 0, hex: trenchHex, target: enemyHex, percent: 50 });
-    expect(result.ok).toBe(true);
-    expect(trench.garrison).toBe(5);
-    const front = state.fronts[0]!;
-    const side = front.sideA.empire === 0 ? front.sideA : front.sideB;
-    expect(side.troops).toBe(5);
-    expect(side.mode).toBe('attack');
-    expect(state.empires[0]!.soldiers).toBe(100);
-  });
 });
 
 describe('DemolishBuilding', () => {
@@ -547,33 +343,29 @@ describe('DemolishBuilding', () => {
 });
 
 describe('FireCannon', () => {
-  test('fires within range, starts the cooldown, and damages both sides', () => {
+  test('fires within range, starts the cooldown, and shells enemy attacks near the target', () => {
     const state = makeState();
     clearStaging(state);
     const edge = borderEdge(state, 0, 1);
-    
     const cannonHex = { q: edge.a.q - 1, r: edge.a.r };
-    gridAt(state.grid, cannonHex)!.building = makeBuilding(state, 'cannon');
-    dispatch(state, { type: 'SendTroops', empire: 0, hex: edge.a, target: edge.b, percent: 20, intent: 'attack' });
-    dispatch(state, { type: 'SendTroops', empire: 1, hex: edge.b, target: edge.a, percent: 20, intent: 'defence' });
-    const front = state.fronts[0]!;
-    const beforeA = front.sideA.troops;
-    const beforeB = front.sideB.troops;
+    setBuilding(state, gridAt(state.grid, cannonHex)!, makeBuilding(state, 'cannon'));
+    dispatch(state, { type: 'SendTroops', empire: 1, target: edge.a, percent: 50 });
+    const offensive = state.offensives[0]!;
+    offensive.head = edge.b;
+    const before = offensive.troops;
     const goldBefore = state.empires[0]!.gold;
 
     const result = dispatch(state, { type: 'FireCannon', empire: 0, from: cannonHex, target: edge.b });
     expect(result.ok).toBe(true);
     expect(state.empires[0]!.gold).toBe(goldBefore - state.config.cannon.cost);
     expect(gridAt(state.grid, cannonHex)!.building!.cooldown).toBe(state.config.cannon.cooldown);
-    
-    expect(front.sideA.troops).toBeLessThan(beforeA);
-    expect(front.sideB.troops).toBeLessThan(beforeB);
+    expect(offensive.troops).toBe(before - state.config.cannon.damage);
   });
 
   test('rejects a target out of range', () => {
     const state = makeState();
     const cannonHex = { q: 0, r: 0 };
-    gridAt(state.grid, cannonHex)!.building = makeBuilding(state, 'cannon');
+    setBuilding(state, gridAt(state.grid, cannonHex)!, makeBuilding(state, 'cannon'));
     const result = dispatch(state, { type: 'FireCannon', empire: 0, from: cannonHex, target: { q: 9, r: 5 } });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe('invalid_target');
@@ -582,7 +374,7 @@ describe('FireCannon', () => {
   test('rejects while reloading with cooldown', () => {
     const state = makeState();
     const cannonHex = { q: 0, r: 0 };
-    gridAt(state.grid, cannonHex)!.building = makeBuilding(state, 'cannon');
+    setBuilding(state, gridAt(state.grid, cannonHex)!, makeBuilding(state, 'cannon'));
     gridAt(state.grid, cannonHex)!.building!.cooldown = 5;
     const result = dispatch(state, { type: 'FireCannon', empire: 0, from: cannonHex, target: { q: 1, r: 0 } });
     expect(result.ok).toBe(false);
@@ -592,7 +384,7 @@ describe('FireCannon', () => {
   test('rejects without enough gold', () => {
     const state = makeState();
     const cannonHex = { q: 0, r: 0 };
-    gridAt(state.grid, cannonHex)!.building = makeBuilding(state, 'cannon');
+    setBuilding(state, gridAt(state.grid, cannonHex)!, makeBuilding(state, 'cannon'));
     state.empires[0]!.gold = 0;
     const result = dispatch(state, { type: 'FireCannon', empire: 0, from: cannonHex, target: { q: 1, r: 0 } });
     expect(result.ok).toBe(false);
@@ -609,7 +401,7 @@ describe('FireCannon', () => {
   test('converts forest/mountain to plain on impact', () => {
     const state = makeState();
     const cannonHex = { q: 2, r: 2 };
-    gridAt(state.grid, cannonHex)!.building = makeBuilding(state, 'cannon');
+    setBuilding(state, gridAt(state.grid, cannonHex)!, makeBuilding(state, 'cannon'));
     const target = { q: 3, r: 2 };
     gridAt(state.grid, target)!.terrain = 'forest';
     state.empires[0]!.unlocks.push('building:cannon');
@@ -743,29 +535,30 @@ describe('speed, pause and log helpers', () => {
     emit({ type: 'PlaceBuilding', empire: 0, hex: { q: 3, r: 2 }, kind: 'cannon' });
     const edge = borderEdge(state, 0, 1);
     state.empires[0]!.soldiers = 0;
-    emit({ type: 'SendTroops', empire: 0, hex: edge.a, target: edge.b, percent: 50, intent: 'attack' });
+    emit({ type: 'SendTroops', empire: 0, target: edge.b, percent: 50 });
     state.empires[0]!.soldiers = 100;
     state.empires[0]!.science = 0;
     emit({ type: 'StartResearch', empire: 0, nodeId: 'drill' });
     state.empires[0]!.gold = 0;
     emit({ type: 'PlaceBuilding', empire: 0, hex: { q: 3, r: 2 }, kind: 'market' });
-    emit({ type: 'SetFrontMode', empire: 0, frontId: 'x', mode: 'attack' });
+    emit({ type: 'RecallOffensive', empire: 0, offensive: 999 });
     
     expect(reasons.size).toBeGreaterThan(0);
   });
 });
 
-describe('RetreatFront', () => {
-  test('rejects an eliminated empire', () => {
+
+describe('building cost at scale', () => {
+  test('a large empire keeps an allowance and stays linear past it', () => {
     const state = makeState();
-    clearStaging(state);
-    const edge = borderEdge(state, 0, 1);
-    dispatch(state, { type: 'SendTroops', empire: 0, hex: edge.a, target: edge.b, percent: 50, intent: 'attack' });
-    const front = state.fronts[0]!;
-    state.empires[0]!.alive = false;
-    const result = dispatch(state, { type: 'RetreatFront', empire: 0, frontId: front.id });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('no_empire');
-    expect(front.sideA.troops).toBeGreaterThan(0);
+    const { cost } = state.config.buildings.market;
+    const { buildingCostStep, tilesPerFreeBuilding } = state.config.economy;
+    const owned = state.grid.cells.filter(cell => cell.owner === 0 && cell.building === null).slice(0, 2);
+    for (const cell of owned) setBuilding(state, cell, createBuilding(state, 'market', 1, 0));
+    const empire = state.empires[0]!;
+    empire.hexCount = 0;
+    expect(buildingCost(state, 0, 'market')).toBeCloseTo(cost * (1 + 2 * buildingCostStep), 6);
+    empire.hexCount = tilesPerFreeBuilding * 5;
+    expect(buildingCost(state, 0, 'market')).toBeCloseTo(cost, 6);
   });
 });

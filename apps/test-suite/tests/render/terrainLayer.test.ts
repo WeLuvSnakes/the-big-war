@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { HexCell } from '@the-big-war/client/game/map/map.types';
+import { visibleHexRange } from '@the-big-war/client/render/terrain-layer';
 import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants';
 import type { AxialGrid } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { visibleHexRange, terrainSignature } from '@the-big-war/client/render/terrain-layer';
 import { axialToPixel, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 function makeCellGrid(width: number, height: number): AxialGrid<HexCell> {
@@ -10,6 +10,7 @@ function makeCellGrid(width: number, height: number): AxialGrid<HexCell> {
     q: hex.q,
     r: hex.r,
     terrain: 'plain',
+    biome: 'temperate',
     owner: NEUTRAL_OWNER,
     building: null,
   }));
@@ -42,28 +43,3 @@ describe('visibleHexRange', () => {
   });
 });
 
-describe('terrainSignature', () => {
-  test('is stable for identical visible slices', () => {
-    const grid = makeCellGrid(10, 10);
-    const range = { minQ: 2, maxQ: 5, minR: 1, maxR: 4 };
-    expect(terrainSignature(grid, range)).toBe(terrainSignature(grid, range));
-  });
-
-  test('changes when an owner inside the range changes', () => {
-    const grid = makeCellGrid(10, 10);
-    const range = { minQ: 2, maxQ: 5, minR: 1, maxR: 4 };
-    const before = terrainSignature(grid, range);
-    const cell = grid.cells[2 * grid.width + 3];
-    if (cell) cell.owner = 4;
-    expect(terrainSignature(grid, range)).not.toBe(before);
-  });
-
-  test('ignores cells outside the range', () => {
-    const grid = makeCellGrid(10, 10);
-    const range = { minQ: 0, maxQ: 2, minR: 0, maxR: 2 };
-    const before = terrainSignature(grid, range);
-    const outside = grid.cells[9 * grid.width + 9];
-    if (outside) outside.owner = 6;
-    expect(terrainSignature(grid, range)).toBe(before);
-  });
-});

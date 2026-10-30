@@ -10,6 +10,7 @@
     "preview": "bun run --cwd apps/client preview",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "bench": "bun apps/test-suite/bench/tick-bench.ts && bun apps/test-suite/bench/systems-bench.ts",
     "lint": "bun libs/linter/src/cli.ts apps libs",
     "lint:fix": "bun libs/linter/src/cli.ts apps libs --fix",
     "check": "bun run lint && bun run typecheck && bun test && bun run build",

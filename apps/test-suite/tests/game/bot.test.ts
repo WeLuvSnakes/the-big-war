@@ -1,4 +1,6 @@
 import { testEmpire } from '../support/fixture';
+import { labelWorld } from '@the-big-war/client/game/map/world-labels.service';
+import { createWorldIndex, setBuilding, setOwner } from '@the-big-war/client/game/map/world-index.service';
 
 
 import { describe, expect, test } from 'bun:test';
@@ -37,6 +39,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
     q: hex.q,
     r: hex.r,
     terrain: 'plain',
+    biome: 'temperate',
     owner: NEUTRAL_OWNER,
     building: null,
   }));
@@ -49,11 +52,17 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
     status: 'playing',
     playerEmpire: 0,
     grid,
+    index: createWorldIndex(grid),
     empires,
-    fronts: [],
-    expeditions: [],
-    columns: [],
+    offensives: [], walkers: [],
+    ships: [],
+    nextShipId: 1,
+    shipHash: new Map(),
+    tradeClock: 0,
+    nextOffensiveId: 1,
+    spawnSites: [],
     landHexCount: grid.cells.length,
+    map: labelWorld(grid),
     elapsed: 0,
     tick: 0,
     speed: 1,
@@ -69,11 +78,11 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
   const strip = Math.floor(grid.width / empires.length);
   for (const cell of grid.cells) {
     const owner = Math.floor(cell.q / strip);
-    cell.owner = owner >= 0 && owner < empires.length ? owner : NEUTRAL_OWNER;
+    setOwner(state, cell, owner >= 0 && owner < empires.length ? owner : NEUTRAL_OWNER);
   }
   for (const empire of empires) {
     const q = Math.min(grid.width - 1, empire.id * strip);
-    gridAt(grid, { q, r: 0 })!.building = city(state);
+    setBuilding(state, gridAt(grid, { q, r: 0 })!, city(state));
     recomputeEmpireBonuses(state, empire.id);
     countHexes(state, empire.id);
   }
@@ -81,7 +90,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
 }
 
 function city(state: GameState, level = 1): Building {
-  return { id: state.nextBuildingId++, kind: 'city', level, cooldown: 0, growth: 0, demolishAt: null, buildRemaining: 0, gatherers: [], garrison: 0, machineGun: false };
+  return { id: state.nextBuildingId++, kind: 'city', level, cooldown: 0, growth: 0, demolishAt: null, buildRemaining: 0, gatherers: [], garrison: 0, machineGun: false, shipBuild: 0, shellDamage: 0 };
 }
 
 function countHexes(state: GameState, empireId: number): void {
@@ -143,7 +152,7 @@ describe('botTick discipline', () => {
     for (let i = 0; i < 40; i++) {
       const commands = botTick(bot, state, 0.5);
       for (const command of commands) {
-        if (command.type === 'SendTroops' || command.type === 'SetFrontMode' ||
+        if (command.type === 'SendTroops' ||
             command.type === 'PlaceBuilding' || command.type === 'FireCannon' ||
             command.type === 'StartResearch' || command.type === 'OfferPeace' ||
             command.type === 'DeclareWar') {
@@ -208,7 +217,7 @@ describe('botTick behaviour', () => {
     const site = findSite(state, 1, 'trench');
     expect(site).not.toBeNull();
     const cell = gridAt(state.grid, site!)!;
-    cell.building = { ...city(state), kind: 'trench' };
+    setBuilding(state, cell, { ...city(state), kind: 'trench' });
     expect(findSite(state, 1, 'machine_gun')).toEqual(site);
 
     state.empires[1]!.soldiers = state.empires[1]!.reserveCap;
@@ -272,8 +281,6 @@ describe('botTick behaviour', () => {
     const send = commands.find(command => command.type === 'SendTroops');
     expect(send).toBeDefined();
     if (send && send.type === 'SendTroops') {
-      expect(send.intent).toBe('attack');
-      expect(gridAt(state.grid, send.hex)!.owner).toBe(1);
       expect(gridAt(state.grid, send.target)!.owner).not.toBe(1);
     }
   });

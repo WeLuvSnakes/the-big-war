@@ -14,6 +14,7 @@ const snapshot = (patch: Partial<MatchSnapshot> = {}): MatchSnapshot => ({
   aliveEmpires: 4,
   cooldowns: new Map(),
   ownBuildings: new Map(),
+  ownShips: new Map(),
   ...patch,
 });
 

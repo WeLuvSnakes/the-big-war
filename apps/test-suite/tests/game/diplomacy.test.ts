@@ -4,9 +4,11 @@ import { createRng } from '@the-big-war/game-engine/rng/rng.service';
 import type { Empire } from '@the-big-war/client/game/empire/empire.types';
 import type { GameState } from '@the-big-war/client/game/state/state.types';
 import { dispatch } from '@the-big-war/client/game/commands/commands.service';
+import { labelWorld } from '@the-big-war/client/game/map/world-labels.service';
 import type { GameConfig } from '@the-big-war/client/game/config/config.types';
 import type { HexCell, HexGrid } from '@the-big-war/client/game/map/map.types';
 import { makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { createWorldIndex } from '@the-big-war/client/game/map/world-index.service';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
 import { acceptsOffer, agreePeace, declareWar, expireOffers, getRelation, isProtected, offerCooldown, pendingOffer, relationKey } from '@the-big-war/client/game/diplomacy/diplomacy.service';
 
@@ -22,6 +24,7 @@ function createTestState(configOverrides: Partial<GameConfig> = {}): GameState {
     q: hex.q,
     r: hex.r,
     terrain: 'plain',
+    biome: 'temperate',
     owner: -1,
     building: null,
   }));
@@ -41,11 +44,17 @@ function createTestState(configOverrides: Partial<GameConfig> = {}): GameState {
     status: 'playing',
     playerEmpire: 0,
     grid,
+    index: createWorldIndex(grid),
     empires,
-    fronts: [],
-    expeditions: [],
-    columns: [],
+    offensives: [], walkers: [],
+    ships: [],
+    nextShipId: 1,
+    shipHash: new Map(),
+    tradeClock: 0,
+    nextOffensiveId: 1,
+    spawnSites: [],
     landHexCount: grid.cells.length,
+    map: labelWorld(grid),
     elapsed: 0,
     tick: 0,
     speed: 1,
@@ -80,10 +89,8 @@ describe('diplomacy contracts', () => {
     const result = dispatch(state, {
       type: 'SendTroops',
       empire: 0,
-      hex: { q: 3, r: 0 },
       target: { q: 4, r: 0 },
       percent: 50,
-      intent: 'attack',
     });
     expect(result.ok).toBe(true);
     expect(getRelation(state, 0, 1).status).toBe('war');
@@ -107,12 +114,10 @@ describe('diplomacy contracts', () => {
     dispatch(state, {
       type: 'SendTroops',
       empire: 0,
-      hex: { q: 3, r: 0 },
       target: { q: 4, r: 0 },
       percent: 50,
-      intent: 'attack',
     });
-    expect(state.fronts.length).toBe(1);
+    expect(state.offensives.length).toBe(1);
     expect(state.empires[0]!.soldiers).toBe(50);
     state.empires[1]!.soldiers = 40;
 
@@ -127,16 +132,14 @@ describe('diplomacy contracts', () => {
     expect(rel.status).toBe('peace');
     expect(rel.treatyUntil).toBe(state.elapsed + state.config.diplomacy.treatySeconds);
 
-    expect(state.fronts.length).toBe(0);
+    expect(state.offensives.length).toBe(0);
     expect(state.empires[0]!.soldiers).toBe(100);
 
     const attackBlocked = dispatch(state, {
       type: 'SendTroops',
       empire: 0,
-      hex: { q: 3, r: 0 },
       target: { q: 4, r: 0 },
       percent: 50,
-      intent: 'attack',
     });
     expect(attackBlocked.ok).toBe(false);
     if (!attackBlocked.ok) expect(attackBlocked.reason).toBe('in_peace');

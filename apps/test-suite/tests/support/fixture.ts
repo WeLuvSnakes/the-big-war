@@ -1,5 +1,6 @@
 import type { Empire } from '@the-big-war/client/game/empire/empire.types';
 import type { GameState } from '@the-big-war/client/game/state/state.types';
+import { setBuilding } from '@the-big-war/client/game/map/world-index.service';
 import { emptyModifierTotals } from '@the-big-war/client/game/modifier/modifier.service';
 
 const STAGING_KINDS: readonly string[] = ['city', 'barracks', 'fort'];
@@ -33,6 +34,6 @@ export function testEmpire(fields: Partial<Empire> & { readonly id: number }): E
 
 export function clearStaging(state: GameState): void {
   for (const cell of state.grid.cells) {
-    if (cell.building && STAGING_KINDS.includes(cell.building.kind)) cell.building = null;
+    if (cell.building && STAGING_KINDS.includes(cell.building.kind)) setBuilding(state, cell, null);
   }
 }

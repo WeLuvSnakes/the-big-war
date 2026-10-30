@@ -68,10 +68,8 @@ describe('match integration', () => {
       const send = store.dispatch({
         type: 'SendTroops',
         empire: me,
-        hex: home!,
         target,
         percent: 50,
-        intent: 'attack',
       });
       
       expect(typeof send.ok).toBe('boolean');

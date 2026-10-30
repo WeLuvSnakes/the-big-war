@@ -11,7 +11,6 @@ import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants'
 import { RESEARCH_NODES } from '@the-big-war/client/game/research/research.constants';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
 import { MAX_GAME_SECONDS_PER_STEP } from '@the-big-war/game-engine/store/store.constants';
-import { edgeId, ensureFront, findFrontByEdge } from '@the-big-war/client/game/front/front.service';
 
 describe('devstate', () => {
   test('fabricates a plausible, renderable map', () => {
@@ -20,7 +19,7 @@ describe('devstate', () => {
     expect(state.empires.length).toBe(state.config.start.empireCount);
     expect(state.status).toBe('playing');
     expect(state.landHexCount).toBeGreaterThan(0);
-    expect(state.landHexCount).toBe(state.grid.cells.length);
+    expect(state.landHexCount).toBe(state.grid.cells.filter(cell => cell.terrain !== 'water').length);
 
     const owned = state.grid.cells.filter(cell => cell.owner !== NEUTRAL_OWNER);
     expect(owned.length).toBeGreaterThan(0);
@@ -41,30 +40,6 @@ describe('devstate', () => {
     const b = createDevState();
     const ownersOf = (s: ReturnType<typeof createDevState>) => s.grid.cells.map(c => c.owner).join(',');
     expect(ownersOf(a)).toBe(ownersOf(b));
-    expect(a.fronts.length).toBe(b.fronts.length);
-  });
-});
-
-describe('hex + front plumbing', () => {
-  test('edgeId is order-independent', () => {
-    expect(edgeId({ q: 1, r: 0 }, { q: 0, r: 0 })).toBe(edgeId({ q: 0, r: 0 }, { q: 1, r: 0 }));
-  });
-
-  test('ensureFront is idempotent per edge and adopts hex owners', () => {
-    const state = createDevState();
-    const cell = state.grid.cells.find(c => c.owner !== NEUTRAL_OWNER)!;
-    const neighbour = state.grid.cells.find(
-      c => state.grid.cells.some(x => x.q === cell.q && x.r === cell.r) &&
-        Math.abs(c.q - cell.q) + Math.abs(c.r - cell.r) > 0 &&
-        c.owner !== cell.owner,
-    );
-    if (!neighbour) return; 
-    const before = state.fronts.length;
-    const front = ensureFront(state, cell, neighbour);
-    expect(ensureFront(state, neighbour, cell).id).toBe(front.id);
-    expect(findFrontByEdge(state, cell, neighbour)?.id).toBe(front.id);
-    
-    expect(state.fronts.length).toBeGreaterThanOrEqual(before);
   });
 });
 
@@ -81,26 +56,17 @@ describe('command bus contract', () => {
   test('SendTroops reports insufficient_troops for an empty reserve', () => {
     const state = createDevState();
     const empire = state.empires[0]!;
-    const home = state.grid.cells.find(c => c.owner === empire.id)!;
     const foreign = state.grid.cells.find(c => c.owner !== empire.id && c.owner !== NEUTRAL_OWNER);
     if (!foreign) return;
     empire.soldiers = 0;
     const result = dispatch(state, {
       type: 'SendTroops',
       empire: 0,
-      hex: home,
       target: foreign,
       percent: 50,
-      intent: 'attack',
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe('insufficient_troops');
-  });
-
-  test('SetFrontMode rejects unknown fronts', () => {
-    const state = createDevState();
-    const result = dispatch(state, { type: 'SetFrontMode', empire: 0, frontId: 'nope', mode: 'attack' });
-    expect(result.ok).toBe(false);
   });
 
   test('StartResearch rejects without science and accepts with enough', () => {
