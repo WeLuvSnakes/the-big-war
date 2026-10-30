@@ -2,27 +2,27 @@ import { ownerColor } from './theme';
 import type { SoldierFrame } from './pixel-sprites';
 import type { HexCell } from '../game/map/map.types';
 import { Container, Sprite, Text, Texture } from 'pixi.js';
+import type { GameState } from '../game/state/state.types';
 import type { EmpireId } from '../game/empire/empire.types';
-import type { Front, FrontSide } from '../game/front/front.types';
+import { DETAIL_TILE_PX, type HexRange } from './terrain-layer';
+import type { WorldIndex } from '../game/map/world-index.types';
+import type { Offensive } from '../game/offensive/offensive.types';
 import { trenchFront, trenchShape, trenchSlots } from './trench-geometry';
-import { columnLegDuration } from '../game/simulation/systems/columns.system';
-import type { Column, Expedition, GameState } from '../game/state/state.types';
 import { SOLDIER_SIZE, SOLDIER_SPRITES, SPRITE_PALETTE } from './pixel-sprites';
-import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { axialToPixel, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { axialToPixel } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
-const MAX_SOLDIERS_PER_SIDE = 30;
+const MAX_WAVE_SOLDIERS = 30;
 const MAX_TRENCH_SOLDIERS = 8;
 const FIRE_CYCLE = 0.45;
 const IDLE_CYCLE = 1.3;
 const SOLDIER_SCALE = 0.32;
 const ATTACK_CYCLE = 0.6;
 const MARCH_CYCLE = 0.5;
-const LUNGE = 0.12;
-const MAX_COLUMN_SOLDIERS = 12;
 const COUNT_SIZE = 0.34;
 const GATHERER_SCALE = 0.26;
 const GATHERER_COLOR = 0x8a5a2b;
+const REFRESH_FRAMES = 12;
+const FAR_COUNT_PX = 14;
 
 export class SoldiersLayer {
 
@@ -32,26 +32,46 @@ export class SoldiersLayer {
   private used = 0;
   private readonly labels: Text[] = [];
   private labelsUsed = 0;
+  private garrisons: HexCell[] = [];
+  private gatherers: HexCell[] = [];
+  private index: WorldIndex | null = null;
+  private frame = 0;
 
   constructor() {
     this.container = new Container();
     this.container.eventMode = 'none';
   }
 
-  draw(state: GameState, hexSize: number): void {
-    const { fronts, expeditions, elapsed } = state;
+  draw(state: GameState, hexSize: number, range: HexRange | null, tilePx: number): void {
     this.used = 0;
     this.labelsUsed = 0;
-    for (const front of fronts) {
-      this.drawSide(state, front, front.sideA, front.hexA, front.hexB, hexSize);
-      this.drawSide(state, front, front.sideB, front.hexB, front.hexA, hexSize);
+    this.refreshBusyCells(state);
+    if (range) {
+      const detail = tilePx >= DETAIL_TILE_PX;
+      if (detail) this.drawGarrisons(state, hexSize, range);
+      for (const offensive of state.offensives) {
+        if (detail) this.drawWave(offensive, hexSize, state.elapsed, range);
+        else this.drawFarWave(offensive, hexSize, tilePx, range);
+      }
+      if (detail) this.drawGatherers(hexSize, state.elapsed, range);
     }
-    this.drawGarrisons(state, hexSize);
-    for (const expedition of expeditions) this.drawSquads(expedition, hexSize, elapsed);
-    for (const column of state.columns) this.drawColumn(state, column, hexSize, elapsed);
-    this.drawGatherers(state, hexSize, elapsed);
     for (let i = this.used; i < this.pool.length; i++) this.pool[i]!.visible = false;
     for (let i = this.labelsUsed; i < this.labels.length; i++) this.labels[i]!.visible = false;
+  }
+
+  private refreshBusyCells(state: GameState): void {
+    if (state.index === this.index && ++this.frame < REFRESH_FRAMES) return;
+    this.index = state.index;
+    this.frame = 0;
+    this.garrisons = [];
+    this.gatherers = [];
+    for (const at of state.index.buildings) {
+      const cell = state.grid.cells[at]!;
+      const building = cell.building;
+      if (!building) continue;
+      if (building.kind === 'trench' && building.garrison > 0) this.garrisons.push(cell);
+      if (building.gatherers.length > 0) this.gatherers.push(cell);
+    }
   }
 
   reset(): void {
@@ -65,63 +85,10 @@ export class SoldiersLayer {
     this.textures.clear();
   }
 
-  private drawSide(state: GameState, front: Front, side: FrontSide, from: Axial, to: Axial, hexSize: number): void {
-    const elapsed = state.elapsed;
-    const count = Math.min(MAX_SOLDIERS_PER_SIDE, Math.ceil(side.troops));
-    if (count <= 0) return;
-    const home = gridAt(state.grid, from);
-    if (side.mode === 'defence' && home?.owner === side.empire && home.building?.kind === 'trench') {
-      this.drawInTrench(state, home, side.troops, side.empire, true, hexSize);
-      return;
-    }
-    const a = axialToPixel(from, hexSize);
-    const b = axialToPixel(to, hexSize);
-    let dx = b.x - a.x;
-    let dy = b.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    dx /= len;
-    dy /= len;
-    const px = -dy;
-    const py = dx;
-    const attacking = side.mode !== 'defence';
-    const color = ownerColor(side.empire);
-    const pixel = (hexSize * SOLDIER_SCALE) / SOLDIER_SIZE;
-    const columns = Math.ceil(Math.sqrt(count * 2));
-    const spacing = (hexSize * 0.8) / columns;
-    const seed = hashId(front.id);
-    let sumX = 0;
-    let topY = Number.POSITIVE_INFINITY;
-
-    for (let i = 0; i < count; i++) {
-      const col = i % columns;
-      const rank = Math.floor(i / columns);
-      const lateral = (col - (columns - 1) / 2) * spacing + (rank % 2) * spacing * 0.5;
-      let depth = hexSize * 0.38 - rank * spacing * 0.8;
-      const phase = (elapsed + ((seed + i * 37) % 100) / 100);
-      let frame: SoldierFrame;
-      if (attacking) {
-        const t = (phase / ATTACK_CYCLE) % 1;
-        frame = t < 0.45 ? 'windup' : 'strike';
-        if (frame === 'strike') depth += hexSize * LUNGE * Math.sin(((t - 0.45) / 0.55) * Math.PI);
-      } else {
-        frame = Math.floor(phase / MARCH_CYCLE) % 4 === 0 ? 'step' : 'idle';
-      }
-      const sprite = this.acquire();
-      sprite.texture = this.texture(color, frame);
-      sprite.scale.set(dx < 0 ? -pixel : pixel, pixel);
-      sprite.position.set(a.x + dx * depth + px * lateral, a.y + dy * depth + py * lateral);
-      sprite.zIndex = sprite.position.y;
-      sumX += sprite.position.x;
-      topY = Math.min(topY, sprite.position.y);
-    }
-    const headroom = SOLDIER_SIZE * pixel * 0.85 + hexSize * 0.08;
-    this.drawCount(Math.ceil(side.troops), color, sumX / count, topY - headroom, hexSize);
-  }
-
-  private drawGarrisons(state: GameState, hexSize: number): void {
-    for (const cell of state.grid.cells) {
+  private drawGarrisons(state: GameState, hexSize: number, range: HexRange): void {
+    for (const cell of this.garrisons) {
       const building = cell.building;
-      if (!building || building.kind !== 'trench' || building.garrison <= 0) continue;
+      if (!building || building.kind !== 'trench' || building.garrison <= 0 || !inRange(cell, range)) continue;
       this.drawInTrench(state, cell, building.garrison, cell.owner, false, hexSize);
     }
   }
@@ -160,10 +127,10 @@ export class SoldiersLayer {
     });
     if (slots.length === 0) return;
     const headroom = SOLDIER_SIZE * pixel * 0.7 + hexSize * 0.08;
-    this.drawCount(Math.ceil(troops), color, sumX / slots.length, topY - headroom, hexSize);
+    this.drawCount(Math.ceil(troops), color, sumX / slots.length, topY - headroom, hexSize * COUNT_SIZE);
   }
 
-  private drawCount(troops: number, color: number, x: number, y: number, hexSize: number): void {
+  private drawCount(troops: number, color: number, x: number, y: number, size: number): void {
     let label = this.labels[this.labelsUsed];
     if (!label) {
       label = new Text({
@@ -181,64 +148,60 @@ export class SoldiersLayer {
     const text = String(troops);
     if (label.text !== text) label.text = text;
     label.tint = mixTowardWhite(color);
-    label.scale.set((hexSize * COUNT_SIZE) / 24);
+    label.scale.set(size / 24);
     label.position.set(x, y);
     label.visible = true;
   }
 
-  private drawColumn(state: GameState, column: Column, hexSize: number, elapsed: number): void {
-    const here = column.path[column.step];
-    if (!here) return;
-    const next = column.path[column.step + 1] ?? here;
-    const a = axialToPixel(here, hexSize);
-    const b = axialToPixel(next, hexSize);
-    const t = Math.min(1, column.progress / columnLegDuration(state, column));
-    const x = a.x + (b.x - a.x) * t;
-    const y = a.y + (b.y - a.y) * t;
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const color = ownerColor(column.empire);
-    const pixel = (hexSize * SOLDIER_SCALE) / SOLDIER_SIZE;
-    const count = Math.max(1, Math.min(MAX_COLUMN_SOLDIERS, Math.ceil(column.troops)));
-    const perRank = 3;
-    const spacing = hexSize * 0.22;
-    for (let i = 0; i < count; i++) {
-      const rank = Math.floor(i / perRank);
-      const lateral = ((i % perRank) - (perRank - 1) / 2) * spacing;
-      const behind = rank * spacing;
-      const phase = elapsed + i * 0.13;
-      const sprite = this.acquire();
-      sprite.texture = this.texture(color, Math.floor(phase / (MARCH_CYCLE / 2)) % 2 === 0 ? 'step' : 'idle');
-      sprite.scale.set(dx < 0 ? -pixel : pixel, pixel);
-      sprite.position.set(x - (dx / len) * behind - (dy / len) * lateral, y - (dy / len) * behind + (dx / len) * lateral);
-      sprite.zIndex = sprite.position.y;
+  private drawFarWave(offensive: Offensive, hexSize: number, tilePx: number, range: HexRange): void {
+    const { recent } = offensive;
+    if (recent.length === 0 || !recent.some(hex => inRange(hex, range))) return;
+    let sumX = 0;
+    let sumY = 0;
+    for (const hex of recent) {
+      const at = axialToPixel(hex, hexSize);
+      sumX += at.x;
+      sumY += at.y;
     }
+    const size = (FAR_COUNT_PX * hexSize) / tilePx;
+    const color = ownerColor(offensive.empire);
+    this.drawCount(Math.ceil(offensive.troops), color, sumX / recent.length, sumY / recent.length, size);
   }
 
-  private drawSquads(expedition: Expedition, hexSize: number, elapsed: number): void {
-    const color = ownerColor(expedition.empire);
+  private drawWave(offensive: Offensive, hexSize: number, elapsed: number, range: HexRange): void {
+    const { recent } = offensive;
+    if (recent.length === 0 || !recent.some(hex => inRange(hex, range))) return;
+    const color = ownerColor(offensive.empire);
     const pixel = (hexSize * SOLDIER_SCALE) / SOLDIER_SIZE;
-    expedition.squads.forEach((squad, i) => {
-      const toward = squad.claiming ? squad.goal : squad.from;
-      const facing = toward ? toward.q - squad.pos.q : squad.heading.q;
-      const moving = squad.goal !== null;
-      const phase = elapsed + i * 0.17;
-      const frame = moving && Math.floor(phase / (MARCH_CYCLE / 2)) % 2 === 0 ? 'step' : 'idle';
+    const count = Math.min(MAX_WAVE_SOLDIERS, Math.ceil(offensive.troops));
+    let sumX = 0;
+    let topY = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < count; i++) {
+      const hex = recent[i % recent.length]!;
+      const at = axialToPixel(hex, hexSize);
+      const seed = (i * 37 + offensive.id * 11) % 100;
+      const phase = elapsed + seed / 100;
+      const t = (phase / ATTACK_CYCLE) % 1;
+      const lateral = ((seed % 10) / 10 - 0.5) * hexSize * 0.8;
+      const depth = (((seed * 7) % 10) / 10 - 0.5) * hexSize * 0.8;
       const sprite = this.acquire();
-      sprite.texture = this.texture(color, frame);
-      sprite.scale.set(facing < 0 ? -pixel : pixel, pixel);
-      const at = axialToPixel(squad.pos, hexSize);
-      sprite.position.set(at.x, at.y);
-      sprite.zIndex = at.y;
-    });
+      sprite.texture = this.texture(color, t < 0.45 ? 'windup' : 'strike');
+      sprite.scale.set(offensive.focus.q < hex.q ? -pixel : pixel, pixel);
+      sprite.position.set(at.x + lateral, at.y + depth);
+      sprite.zIndex = sprite.position.y;
+      sumX += sprite.position.x;
+      topY = Math.min(topY, sprite.position.y);
+    }
+    if (count === 0) return;
+    const headroom = SOLDIER_SIZE * pixel * 0.85 + hexSize * 0.08;
+    this.drawCount(Math.ceil(offensive.troops), color, sumX / count, topY - headroom, hexSize * COUNT_SIZE);
   }
 
-  private drawGatherers(state: GameState, hexSize: number, elapsed: number): void {
+  private drawGatherers(hexSize: number, elapsed: number, range: HexRange): void {
     const pixel = (hexSize * GATHERER_SCALE) / SOLDIER_SIZE;
-    for (const cell of state.grid.cells) {
+    for (const cell of this.gatherers) {
       const building = cell.building;
-      if (!building || building.gatherers.length === 0) continue;
+      if (!building || building.gatherers.length === 0 || !inRange(cell, range)) continue;
       building.gatherers.forEach((gatherer, i) => {
         if (gatherer.phase === 'idle') return;
         const at = axialToPixel(gatherer.pos, hexSize);
@@ -297,10 +260,8 @@ export class SoldiersLayer {
   }
 }
 
-function hashId(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  return Math.abs(hash);
+function inRange(hex: { readonly q: number; readonly r: number }, range: HexRange): boolean {
+  return hex.q >= range.minQ && hex.q <= range.maxQ && hex.r >= range.minR && hex.r <= range.maxR;
 }
 
 function mixTowardWhite(color: number): number {

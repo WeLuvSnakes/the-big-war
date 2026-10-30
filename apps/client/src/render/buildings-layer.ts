@@ -1,8 +1,9 @@
 import { DEMOLISH_DIM } from './theme';
-import { Container, Graphics } from 'pixi.js';
 import type { HexRange } from './terrain-layer';
+import { DETAIL_TILE_PX } from './terrain-layer';
 import type { HexCell } from '../game/map/map.types';
 import type { PlacementGhost } from './overlay-layer.types';
+import { Container, Graphics, GraphicsContext } from 'pixi.js';
 import { clamp01 } from '@the-big-war/game-engine/math/math.service';
 import { BUILDING_SPRITES, SPRITE_PALETTE, SPRITE_SIZE } from './pixel-sprites';
 import { axialToPixel } from '@the-big-war/game-engine/world-tile/world-tile.service';
@@ -21,6 +22,9 @@ const BAR_FILL = 0xffd35c;
 const FORT_RING_COLOR = 0x9a9a9a;
 const FORT_RING_ALPHA = 0.55;
 const FORT_RING_FILL_ALPHA = 0.06;
+const ICON_PX = 14;
+const LANDMARK_TILE_PX = 5;
+const LANDMARKS: ReadonlySet<BuildingKind> = new Set<BuildingKind>(['city', 'fort']);
 
 interface GlyphEntry {
   readonly object: Graphics;
@@ -39,6 +43,7 @@ export class BuildingsLayer {
   private readonly ghost = new Graphics();
   private readonly progress = new Graphics();
   private readonly rings = new Graphics();
+  private readonly contexts = new Map<string, GraphicsContext>();
   private ghostKey = '';
   private elapsed = 0;
 
@@ -60,7 +65,8 @@ export class BuildingsLayer {
     const key = `${ghost.kind},${hexSize}`;
     if (key !== this.ghostKey) {
       this.ghostKey = key;
-      drawSprite(this.ghost, ghost.kind, 1, hexSize);
+      this.ghost.clear();
+      paintSprite(this.ghost, ghost.kind, 1, hexSize);
     }
     this.ghost.alpha = ghost.valid ? GHOST_ALPHA : INVALID_GHOST_ALPHA;
     this.ghost.tint = ghost.valid ? 0xffffff : INVALID_GHOST_TINT;
@@ -71,8 +77,10 @@ export class BuildingsLayer {
 
   draw(
     grid: AxialGrid<HexCell>,
+    indexed: readonly number[],
     hexSize: number,
     range: HexRange | null,
+    tilePx: number,
     elapsed: number,
     specs: Readonly<Record<BuildingKind, { readonly buildSeconds: number }>>,
     fortRadius: number,
@@ -84,49 +92,51 @@ export class BuildingsLayer {
       this.releaseAll();
       return;
     }
-    const width = grid.width;
+    const detail = tilePx >= DETAIL_TILE_PX;
+    const iconScale = Math.max(1, ICON_PX / (tilePx * SPRITE_FILL));
     const seen = new Set<BuildingId>();
-    for (let r = range.minR; r <= range.maxR; r++) {
-      for (let q = range.minQ; q <= range.maxQ; q++) {
-        const cell = grid.cells[r * width + q];
-        const building = cell?.building ?? null;
-        if (!building) continue;
-        const center = axialToPixel({ q, r }, hexSize);
-        if (building.kind === 'trench') {
-          if (building.buildRemaining > 0) {
-            const total = specs.trench.buildSeconds || 1;
-            this.drawProgress(center.x, center.y, hexSize, 1 - building.buildRemaining / total);
-          }
-          continue;
-        }
-        seen.add(building.id);
-        const entry = this.acquire(building, hexSize);
-        entry.object.position.set(center.x, center.y);
-        if (building.kind === 'fort' && building.buildRemaining <= 0) {
-          this.drawFortRing(center.x, center.y, (fortRadius + 0.5) * hexSize);
-        }
-        const demolishing = building.demolishAt !== null;
-        const levelChanged = entry.level !== building.level;
-        const kindChanged = entry.kind !== building.kind;
-        const demolishChanged = entry.demolishAt !== building.demolishAt;
-        if (levelChanged || kindChanged || demolishChanged || entry.id !== building.id) {
-          entry.id = building.id;
-          entry.kind = building.kind;
-          entry.level = building.level;
-          entry.demolishAt = building.demolishAt;
-          entry.demolishing = demolishing;
-          this.redraw(entry, hexSize);
-        }
-        
-        const constructing = building.buildRemaining > 0;
-        entry.object.alpha = demolishing ? this.demolishAlpha() : constructing ? CONSTRUCTION_ALPHA : 1;
-        if (constructing) {
-          const total = specs[building.kind].buildSeconds || 1;
+    for (const at of indexed) {
+      const cell = grid.cells[at];
+      const building = cell?.building ?? null;
+      if (!cell || !building) continue;
+      const { q, r } = cell;
+      if (q < range.minQ || q > range.maxQ || r < range.minR || r > range.maxR) continue;
+      if (building.kind === 'trench' && !detail) continue;
+      if (tilePx < LANDMARK_TILE_PX && !LANDMARKS.has(building.kind)) continue;
+      const center = axialToPixel({ q, r }, hexSize);
+      if (building.kind === 'trench') {
+        if (building.buildRemaining > 0) {
+          const total = specs.trench.buildSeconds || 1;
           this.drawProgress(center.x, center.y, hexSize, 1 - building.buildRemaining / total);
         }
+        continue;
+      }
+      seen.add(building.id);
+      const entry = this.acquire(building, hexSize);
+      entry.object.position.set(center.x, center.y);
+      entry.object.scale.set(iconScale);
+      if (detail && building.kind === 'fort' && building.buildRemaining <= 0) {
+        this.drawFortRing(center.x, center.y, (fortRadius + 0.5) * hexSize);
+      }
+      const demolishing = building.demolishAt !== null;
+      const levelChanged = entry.level !== building.level;
+      const kindChanged = entry.kind !== building.kind;
+      const demolishChanged = entry.demolishAt !== building.demolishAt;
+      if (levelChanged || kindChanged || demolishChanged || entry.id !== building.id) {
+        entry.id = building.id;
+        entry.kind = building.kind;
+        entry.level = building.level;
+        entry.demolishAt = building.demolishAt;
+        entry.demolishing = demolishing;
+        this.redraw(entry, hexSize);
+      }
+      const constructing = building.buildRemaining > 0;
+      entry.object.alpha = demolishing ? this.demolishAlpha() : constructing ? CONSTRUCTION_ALPHA : 1;
+      if (detail && constructing) {
+        const total = specs[building.kind].buildSeconds || 1;
+        this.drawProgress(center.x, center.y, hexSize, 1 - building.buildRemaining / total);
       }
     }
-    
     for (const [id, entry] of this.entries) {
       if (seen.has(id)) continue;
       this.release(id, entry);
@@ -191,12 +201,18 @@ export class BuildingsLayer {
   }
 
   private redraw(entry: GlyphEntry, hexSize: number): void {
-    drawSprite(entry.object, entry.kind, entry.level, hexSize);
+    const key = `${entry.kind},${entry.level},${hexSize}`;
+    let context = this.contexts.get(key);
+    if (!context) {
+      context = new GraphicsContext();
+      paintSprite(context, entry.kind, entry.level, hexSize);
+      this.contexts.set(key, context);
+    }
+    entry.object.context = context;
   }
 }
 
-function drawSprite(g: Graphics, kind: BuildingKind, level: number, hexSize: number): void {
-  g.clear();
+function paintSprite(g: Graphics | GraphicsContext, kind: BuildingKind, level: number, hexSize: number): void {
   const rows = kind === 'city' ? SPRITE_SIZE + 2 : SPRITE_SIZE;
   const pixel = (hexSize * SPRITE_FILL) / rows;
   const left = -(SPRITE_SIZE * pixel) / 2;

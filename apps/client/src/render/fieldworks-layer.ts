@@ -53,30 +53,35 @@ export class FieldworksLayer {
     this.ghost.eventMode = 'none';
   }
 
-  draw(grid: AxialGrid<HexCell>, hexSize: number, range: HexRange | null, ghost: PlacementGhost | null): void {
+  draw(
+    grid: AxialGrid<HexCell>,
+    buildings: readonly number[],
+    hexSize: number,
+    range: HexRange | null,
+    ghost: PlacementGhost | null,
+  ): void {
     const trenchGhost = ghost?.kind === 'trench' ? ghost : null;
     const planned = trenchGhost?.valid ? trenchGhost.hex : null;
     const seen = new Set<BuildingId>();
     if (range) {
-      for (let r = range.minR; r <= range.maxR; r++) {
-        for (let q = range.minQ; q <= range.maxQ; q++) {
-          const cell = grid.cells[r * grid.width + q];
-          const building = cell?.building;
-          if (!cell || !building || (building.kind !== 'trench' && building.kind !== 'bunker')) continue;
-          seen.add(building.id);
-          const shape = building.kind === 'trench' ? trenchShape(grid, cell, planned) : null;
-          const key = `${building.kind},${hexSize},${shape?.key ?? ''},${building.machineGun},${building.buildRemaining > 0}`;
-          const entry = this.acquire(building.id);
-          if (entry.key !== key) {
-            entry.key = key;
-            entry.object.clear();
-            if (shape) drawTrench(entry.object, shape, hexSize, building.machineGun);
-            else if (building.buildRemaining <= 0) drawHedgehogs(entry.object, cell, hexSize);
-          }
-          const center = axialToPixel(cell, hexSize);
-          entry.object.position.set(center.x, center.y);
-          entry.object.alpha = building.buildRemaining > 0 ? CONSTRUCTION_ALPHA : 1;
+      for (const at of buildings) {
+        const cell = grid.cells[at];
+        const building = cell?.building;
+        if (!cell || !building || (building.kind !== 'trench' && building.kind !== 'bunker')) continue;
+        if (cell.q < range.minQ || cell.q > range.maxQ || cell.r < range.minR || cell.r > range.maxR) continue;
+        seen.add(building.id);
+        const shape = building.kind === 'trench' ? trenchShape(grid, cell, planned) : null;
+        const key = `${building.kind},${hexSize},${shape?.key ?? ''},${building.machineGun},${building.buildRemaining > 0}`;
+        const entry = this.acquire(building.id);
+        if (entry.key !== key) {
+          entry.key = key;
+          entry.object.clear();
+          if (shape) drawTrench(entry.object, shape, hexSize, building.machineGun);
+          else if (building.buildRemaining <= 0) drawHedgehogs(entry.object, cell, hexSize);
         }
+        const center = axialToPixel(cell, hexSize);
+        entry.object.position.set(center.x, center.y);
+        entry.object.alpha = building.buildRemaining > 0 ? CONSTRUCTION_ALPHA : 1;
       }
     }
     for (const [id, entry] of this.entries) {

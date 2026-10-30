@@ -1,5 +1,5 @@
+import type { TerrainColorMap } from './theme.types';
 import { clamp } from '@the-big-war/game-engine/math/math.service';
-import type { TerrainColorMap, TerrainMixMap } from './theme.types';
 
 export type * from './theme.types';
 
@@ -60,11 +60,22 @@ export const TERRAIN_TINTS: TerrainColorMap = {
   ore: 0x4a3f2c,
 };
 
-export const TERRAIN_FILL_MIX: TerrainMixMap = {
-  plain: 1.0,
-  forest: 1.0,
-  mountain: 1.0,
-  ore: 1.0,
+export const TERRAIN_PIXEL_MIX = 0.3;
+export const OWNER_BLEND = 0.85;
+export const PAVE_PIXEL_MIX = 0.45;
+
+export const SHALLOW_COLOR = 0x6fc0e8;
+export const SHALLOW_MIX: readonly number[] = [0, 0.6, 0.3];
+
+export const BIOME_COLORS: Readonly<Record<string, number>> = {
+  temperate: NEUTRAL_COLOR,
+  steppe: 0xa9b35a,
+  desert: 0xd9c27e,
+  tundra: 0xb9c4bd,
+  taiga: 0x3f7f5e,
+  jungle: 0x2f8f3c,
+  swamp: 0x5b7048,
+  volcanic: 0x5a4a48,
 };
 
 export const PAVE_MORTAR = 0x6a6358;
@@ -78,7 +89,6 @@ export const HEX_SHADE_MAX = 0.06;
 
 export const HEX_BORDER_WIDTH = 3;
 export const HEX_BORDER_DARKEN = 0.35;
-export const NEUTRAL_BORDER_COLOR = 0x4a8a3a;
 
 export const FRONT_EDGE_COLOR = 0xff6a3d;
 export const FRONT_EDGE_WIDTH = 2.5;
@@ -112,9 +122,15 @@ export const WORLD_BORDER_COLOR = 0xd4a83a;
 export const WORLD_BORDER_WIDTH = 3;
 
 let nationColors: readonly number[] = [];
+let nationColorsRevision = 0;
 
 export function setNationColors(colors: readonly number[]): void {
   nationColors = colors;
+  nationColorsRevision++;
+}
+
+export function nationColorsVersion(): number {
+  return nationColorsRevision;
 }
 
 export function ownerColor(owner: number): number {

@@ -1,3 +1,4 @@
+import type { ShipKind } from '../game/ship/ship.types';
 import type { BuildingKind } from '../game/building/building.types';
 
 export const SPRITE_SIZE = 12;
@@ -17,6 +18,41 @@ export const SPRITE_PALETTE: Readonly<Record<string, number>> = {
   S: 0x7a7a96,
   u: 0x7fd4ff,
   U: 0x3f78d8,
+};
+
+export const SHIP_SPRITE_WIDTH = 14;
+
+export const SHIP_SPRITES: Readonly<Record<ShipKind, readonly string[]>> = {
+  transport: [
+    '.......kk.....',
+    '......kcck....',
+    '...kkkkkkkkk..',
+    '...kwSwSwSwk..',
+    'kkkkkkkkkkkkkk',
+    'kccccccccccck.',
+    '.kWWWWWWWWWk..',
+    '..kkkkkkkkk...',
+  ],
+  battleship: [
+    '......kk......',
+    '......kSk.....',
+    '..kk.kkkkk....',
+    'kkSSkkSSSSkkk.',
+    '.kkkkSSySSSSSk',
+    'kSSSSSSSSSSSSk',
+    '.kccccccccccck',
+    '..kkkkkkkkkkk.',
+  ],
+  trade: [
+    '.....kk.......',
+    '.....kck......',
+    '.....kcck.....',
+    '.....kccck....',
+    '.....kkkkk....',
+    '.kkkkkkkkkkkk.',
+    '..kbbbbbbbbk..',
+    '...kkkkkkkk...',
+  ],
 };
 
 export const BUILDING_SPRITES: Readonly<Record<BuildingKind, readonly string[]>> = {
@@ -103,6 +139,34 @@ export const BUILDING_SPRITES: Readonly<Record<BuildingKind, readonly string[]>>
     '.kUUUUUUUUk.',
     '..kkkkkkkk..',
     '............',
+  ],
+  port: [
+    '............',
+    '.....kk.....',
+    '....kwwk....',
+    '....kkkk....',
+    '.....kk.....',
+    '...kkkkkk...',
+    '.....kk.....',
+    '.k...kk...k.',
+    'kyk..kk..kyk',
+    '.kyk.kk.kyk.',
+    '..kyyyyyyk..',
+    'UUUkkkkkkUUU',
+  ],
+  fishery: [
+    '............',
+    '......kk....',
+    '.....kuuk...',
+    'k...kuuuuk..',
+    'kk.kuuuwkuk.',
+    'kukuuuuuuuuk',
+    'kukuuuuuuuuk',
+    'kk.kuuuuuuk.',
+    'k...kUUUUk..',
+    '.....kkkk...',
+    'bbbbbbbbbbbb',
+    'dddddddddddd',
   ],
   barracks: [
     '.....kk.....',

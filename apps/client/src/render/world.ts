@@ -1,5 +1,7 @@
 import { FxLayer } from './fx-layer';
 import type { FxKind } from './fx-layer';
+import { ShipsLayer } from './ships-layer';
+import { tileImageFor } from './tile-image';
 import { OverlayLayer } from './overlay-layer';
 import { SoldiersLayer } from './soldiers-layer';
 import { BuildingsLayer } from './buildings-layer';
@@ -7,9 +9,9 @@ import type { OverlayState } from './overlay-layer';
 import { FieldworksLayer } from './fieldworks-layer';
 import { NationLabelsLayer } from './nation-labels-layer';
 import type { GameState } from '../game/state/state.types';
-import { TerrainLayer, visibleHexRange } from './terrain-layer';
 import { WORLD_BORDER_COLOR, WORLD_BORDER_WIDTH } from './theme';
 import { Application, Container, Graphics, Ticker } from 'pixi.js';
+import { DETAIL_TILE_PX, TerrainLayer, visibleHexRange } from './terrain-layer';
 import { pixelToHex } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import type {
@@ -44,6 +46,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
 
   const constrainAxis = (value: number, mapExtent: number, viewExtent: number): number => {
     const overflow = mapExtent - viewExtent;
+    if (overflow <= 0) return overflow / 2;
     const slack = viewExtent * PAN_SLACK;
     return Math.min(Math.max(0, overflow) + slack, Math.max(Math.min(0, overflow) - slack, value));
   };
@@ -64,6 +67,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
   const overlay = new OverlayLayer();
   const soldiers = new SoldiersLayer();
   soldiers.container.sortableChildren = true;
+  const ships = new ShipsLayer();
   const nationLabels = new NationLabelsLayer();
   const fx = new FxLayer();
   const worldBorder = new Graphics();
@@ -117,11 +121,12 @@ export function createWorld(options: WorldOptions): WorldRenderer {
   const overlayState: OverlayState = {
     selected: null,
     hovered: null,
-    fronts: [],
     cannonFrom: null,
     cannonRange: 6,
     cannonTarget: null,
     ghost: null,
+    spawnPlots: [],
+    selectedShip: null,
   };
 
   let lastState: GameState | null = null;
@@ -139,7 +144,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
     mapSize = { width: state.grid.width * hexSize, height: state.grid.height * hexSize };
     constrainCamera();
     stage.scale.set(cameraState.scale);
-    stage.position.set(-cameraState.x * cameraState.scale, -cameraState.y * cameraState.scale);
+    stage.position.set(Math.round(-cameraState.x * cameraState.scale), Math.round(-cameraState.y * cameraState.scale));
     const range = visibleHexRange(
       state.grid,
       hexSize,
@@ -148,14 +153,17 @@ export function createWorld(options: WorldOptions): WorldRenderer {
       cameraState.x + size.width / cameraState.scale,
       cameraState.y + size.height / cameraState.scale,
     );
-    terrain.draw(state.grid, hexSize, range);
-    fieldworks.draw(state.grid, hexSize, range, overlayState.ghost);
+    const tilePx = hexSize * cameraState.scale;
+    const image = tileImageFor(state);
+    terrain.draw(state.grid, image, hexSize, range, tilePx, performance.now());
+    const detailRange = tilePx >= DETAIL_TILE_PX ? range : null;
+    fieldworks.draw(state.grid, state.index.buildings, hexSize, detailRange, overlayState.ghost);
     nationLabels.draw(state, hexSize);
-    buildings.draw(state.grid, hexSize, range, state.elapsed, state.config.buildings, state.config.support.fortDefenceRadius);
+    buildings.draw(state.grid, state.index.buildings, hexSize, range, tilePx, state.elapsed, state.config.buildings, state.config.support.fortDefenceRadius);
     buildings.drawGhost(overlayState.ghost, hexSize);
-    overlayState.fronts = state.fronts;
     overlay.draw(overlayState, hexSize);
-    soldiers.draw(state, hexSize);
+    soldiers.draw(state, hexSize, range, tilePx);
+    ships.draw(state, hexSize, cameraState.scale, range, overlayState.selectedShip);
     fx.update(dtSeconds);
 
     const borderWidth = WORLD_BORDER_WIDTH / cameraState.scale;
@@ -210,7 +218,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
         resolution: Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1),
         autoDensity: true,
       });
-      stage.addChild(terrain.container, fieldworks.container, worldBorder, nationLabels.container, buildings.container, overlay.container, soldiers.container, fx.container);
+      stage.addChild(terrain.container, fieldworks.container, worldBorder, nationLabels.container, buildings.container, overlay.container, soldiers.container, ships.container, fx.container);
       app.stage.addChild(stage);
       options.host.appendChild(app.canvas);
       app.canvas.style.display = 'block';
@@ -242,13 +250,15 @@ export function createWorld(options: WorldOptions): WorldRenderer {
         drawFrame(state, dt);
       }
     },
-    setOverlay(next: Partial<Omit<OverlayState, 'fronts'>>): void {
+    setOverlay(next: Partial<OverlayState>): void {
       if (next.selected !== undefined) overlayState.selected = next.selected;
       if (next.hovered !== undefined) overlayState.hovered = next.hovered;
       if (next.cannonFrom !== undefined) overlayState.cannonFrom = next.cannonFrom;
       if (next.cannonRange !== undefined) overlayState.cannonRange = next.cannonRange;
       if (next.cannonTarget !== undefined) overlayState.cannonTarget = next.cannonTarget;
+      if (next.spawnPlots !== undefined) overlayState.spawnPlots = next.spawnPlots;
       if (next.ghost !== undefined) overlayState.ghost = next.ghost;
+      if (next.selectedShip !== undefined) overlayState.selectedShip = next.selectedShip;
     },
     spawnFx(kind: FxKind, hex: Axial, color?: number): void {
       const hexSize = lastState?.config.map.hexSize ?? 32;
@@ -277,6 +287,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
       buildings.reset();
       fieldworks.reset();
       soldiers.reset();
+      ships.reset();
       fx.clear();
       terrain.invalidate();
       app.destroy(true, { children: true });

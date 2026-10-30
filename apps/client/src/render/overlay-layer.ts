@@ -1,26 +1,21 @@
 
 
 import { Container, Graphics } from 'pixi.js';
-import type { OverlayState } from './overlay-layer.types';
-import type { EmpireId } from '../game/empire/empire.types';
-import type { Front, FrontSide } from '../game/front/front.types';
+import type { OverlayState, SpawnPlot } from './overlay-layer.types';
+import { PLOT_BEFORE, START_PLOT } from '../game/state/setup.constants';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { axialToPixel, distance, hexCorners, ring } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import {
-  ACCENT_COLOR,
   DANGER_COLOR,
   HOVER_COLOR,
   HOVER_WIDTH,
   INFO_COLOR,
   SELECTION_COLOR,
   SELECTION_WIDTH,
-  ownerColor,
 } from './theme';
 
 export type * from './overlay-layer.types';
 
-const BADGE_HALF = 0.62; 
-const BADGE_MAX_TROOPS = 120; 
 
 export class OverlayLayer {
   
@@ -39,7 +34,7 @@ export class OverlayLayer {
     const g = this.gfx;
     g.clear();
 
-    for (const front of state.fronts) this.drawFrontBadge(g, front, hexSize);
+    for (const plot of state.spawnPlots) this.drawSpawnPlot(g, plot, hexSize);
 
     if (state.selected) this.drawOutline(g, state.selected, hexSize, SELECTION_COLOR, SELECTION_WIDTH, 1);
     if (state.hovered && !sameHex(state.hovered, state.selected)) {
@@ -56,6 +51,17 @@ export class OverlayLayer {
     }
   }
 
+  private drawSpawnPlot(g: Graphics, plot: SpawnPlot, hexSize: number): void {
+    const center = axialToPixel(plot.hex, hexSize);
+    const left = center.x - hexSize * (PLOT_BEFORE + 0.5);
+    const top = center.y - hexSize * (PLOT_BEFORE + 0.5);
+    const side = hexSize * START_PLOT;
+    g.rect(left, top, side, side);
+    g.fill({ color: plot.color, alpha: plot.own ? 0.85 : 0.6 });
+    g.rect(left, top, side, side);
+    g.stroke({ width: hexSize * (plot.own ? 0.5 : 0.25), color: plot.own ? 0xffffff : plot.color, alpha: 1 });
+  }
+
   private drawOutline(
     g: Graphics,
     hex: Axial,
@@ -68,27 +74,6 @@ export class OverlayLayer {
     const points = hexPolygon(center, hexSize * 0.98);
     g.poly(points);
     g.stroke({ width, color, alpha });
-  }
-
-  private drawFrontBadge(g: Graphics, front: Front, hexSize: number): void {
-    const a = axialToPixel(front.hexA, hexSize);
-    const b = axialToPixel(front.hexB, hexSize);
-    const midX = (a.x + b.x) * 0.5;
-    const midY = (a.y + b.y) * 0.5;
-    
-    let nx = -(b.y - a.y);
-    let ny = b.x - a.x;
-    const len = Math.hypot(nx, ny) || 1;
-    nx /= len;
-    ny /= len;
-    const reach = hexSize * BADGE_HALF;
-    const thickness = Math.max(2.5, hexSize * 0.12);
-
-    drawSideBar(g, midX, midY, nx, ny, reach, front.sideA, thickness);
-    drawSideBar(g, midX, midY, -nx, -ny, reach, front.sideB, thickness);
-
-    g.circle(midX, midY, thickness * 0.6);
-    g.fill({ color: ACCENT_COLOR, alpha: 0.9 });
   }
 
   private drawRangeRing(g: Graphics, from: Axial, range: number, hexSize: number): void {
@@ -124,57 +109,10 @@ function hexPolygon(center: Pixel, size: number): number[] {
   return hexCorners(center, size).flatMap(corner => [corner.x, corner.y]);
 }
 
-function drawSideBar(
-  g: Graphics,
-  midX: number,
-  midY: number,
-  dirX: number,
-  dirY: number,
-  reach: number,
-  side: FrontSide,
-  thickness: number,
-): void {
-  const strength = clamp01(side.troops / BADGE_MAX_TROOPS);
-  const barLen = reach * (0.35 + 0.65 * strength);
-  const ex = midX + dirX * barLen;
-  const ey = midY + dirY * barLen;
-  const color = ownerColor(side.empire);
-  
-  g.moveTo(midX, midY);
-  g.lineTo(ex, ey);
-  g.stroke({ width: thickness, color, alpha: 0.95 });
-  
-  g.circle(ex, ey, thickness * 0.65);
-  g.fill({ color, alpha: 0.95 });
-  
-  const modifierStrength = clamp01((side.modifiers.attack + side.modifiers.defence) / 2 - 0.85);
-  const chevrons = Math.round(modifierStrength * 3);
-  for (let i = 0; i < chevrons; i++) {
-    const t = 0.35 + i * 0.2;
-    const px = midX + dirX * barLen * t;
-    const py = midY + dirY * barLen * t;
-    const sideX = -dirY;
-    const sideY = dirX;
-    const size = thickness * 0.5;
-    g.moveTo(px + sideX * size, py + sideY * size);
-    g.lineTo(px + dirX * size, py + dirY * size);
-    g.lineTo(px - sideX * size, py - sideY * size);
-  }
-  if (chevrons > 0) g.stroke({ width: 1.2, color: 0xffffff, alpha: 0.85 });
-}
-
-function clamp01(value: number): number {
-  return value < 0 ? 0 : value > 1 ? 1 : value;
-}
-
 function sameHex(a: Axial, b: Axial | null): boolean {
   return b !== null && a.q === b.q && a.r === b.r;
 }
 
 export function inCannonRange(from: Axial, target: Axial, range: number): boolean {
   return distance(from, target) <= range;
-}
-
-export function frontEmpires(front: Front): readonly EmpireId[] {
-  return [front.sideA.empire, front.sideB.empire];
 }

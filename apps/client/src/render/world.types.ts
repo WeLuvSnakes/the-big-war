@@ -42,7 +42,7 @@ export interface WorldRenderer {
   
   render(state: GameState): void;
   
-  setOverlay(overlay: Partial<Omit<OverlayState, 'fronts'>>): void;
+  setOverlay(overlay: Partial<OverlayState>): void;
   
   spawnFx(kind: FxKind, hex: Axial, color?: number): void;
   
