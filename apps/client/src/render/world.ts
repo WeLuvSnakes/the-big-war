@@ -1,5 +1,6 @@
 import { FxLayer } from './fx-layer';
 import type { FxKind } from './fx-layer';
+import { RoadsLayer } from './roads-layer';
 import { ShipsLayer } from './ships-layer';
 import { tileImageFor } from './tile-image';
 import { OverlayLayer } from './overlay-layer';
@@ -63,6 +64,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
   const stage = new Container();
   const terrain = new TerrainLayer();
   const fieldworks = new FieldworksLayer();
+  const roads = new RoadsLayer();
   const buildings = new BuildingsLayer();
   const overlay = new OverlayLayer();
   const soldiers = new SoldiersLayer();
@@ -157,6 +159,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
     const image = tileImageFor(state);
     terrain.draw(state.grid, image, hexSize, range, tilePx, performance.now());
     const detailRange = tilePx >= DETAIL_TILE_PX ? range : null;
+    roads.draw(state.grid, state.index.roads, hexSize);
     fieldworks.draw(state.grid, state.index.buildings, hexSize, detailRange, overlayState.ghost);
     nationLabels.draw(state, hexSize);
     buildings.draw(state.grid, state.index.buildings, hexSize, range, tilePx, state.elapsed, state.config.buildings, state.config.support.fortDefenceRadius);
@@ -218,7 +221,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
         resolution: Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1),
         autoDensity: true,
       });
-      stage.addChild(terrain.container, fieldworks.container, worldBorder, nationLabels.container, buildings.container, overlay.container, soldiers.container, ships.container, fx.container);
+      stage.addChild(terrain.container, roads.container, fieldworks.container, worldBorder, nationLabels.container, buildings.container, overlay.container, soldiers.container, ships.container, fx.container);
       app.stage.addChild(stage);
       options.host.appendChild(app.canvas);
       app.canvas.style.display = 'block';
@@ -286,6 +289,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
       if (options.autoStart ?? true) app.ticker.remove(onTick);
       buildings.reset();
       fieldworks.reset();
+      roads.reset();
       soldiers.reset();
       ships.reset();
       fx.clear();
