@@ -1,23 +1,26 @@
-import { testEmpire } from '../support/fixture';
 import { describe, expect, test } from 'bun:test';
+import { testEmpire, setTroops } from '../support/fixture';
 import type { HexCell } from '@the-big-war/client/game/map/map.types';
 import type { GameState } from '@the-big-war/client/game/state/state.types';
 import { dispatch } from '@the-big-war/client/game/commands/commands.service';
 import { step } from '@the-big-war/client/game/simulation/simulation.service';
 import { createBaseState } from '@the-big-war/client/game/state/state.service';
 import type { WaveConfig } from '@the-big-war/client/game/config/config.types';
-import { deployedTroops } from '@the-big-war/client/game/troops/troops.service';
 import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants';
 import { declareWar } from '@the-big-war/client/game/diplomacy/diplomacy.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { createBuilding } from '@the-big-war/client/game/building/building.service';
 import { FIXED_DT } from '@the-big-war/game-engine/simulation/simulation.constants';
+import type { Offensive } from '@the-big-war/client/game/offensive/offensive.types';
 import type { BuildingKind } from '@the-big-war/client/game/building/building.types';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
+import { emptyModifierTotals } from '@the-big-war/client/game/modifier/modifier.service';
 import { setBuilding, setOwner } from '@the-big-war/client/game/map/world-index.service';
-import { gridAt, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { defendersAt, launchOffensive } from '@the-big-war/client/game/offensive/offensive.service';
+import { gridAt, gridIndex, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { attackPowerAt, defencePowerAt } from '@the-big-war/client/game/offensive/wave-power.service';
-import { createMinHeap, heapPop, heapPush } from '@the-big-war/game-engine/collections/min-heap.service';
+import { createMinHeap, heapClear, heapPop, heapPush } from '@the-big-war/game-engine/collections/min-heap.service';
+import { addToEncampments, deployedTroops, drawFromEncampments, killExcessTroops } from '@the-big-war/client/game/troops/troops.service';
 
 const WIDTH = 20;
 const HEIGHT = 6;
@@ -42,7 +45,12 @@ function makeState(split: (cell: HexCell) => number, wave: Partial<WaveConfig> =
   const empires = [0, 1].map(id => testEmpire({ id }));
   const state = createBaseState(config, grid, empires);
   for (const cell of grid.cells) setOwner(state, cell, split(cell));
-  for (const empire of state.empires) empire.hexCount = grid.cells.filter(cell => cell.owner === empire.id).length;
+  for (const empire of state.empires) {
+    empire.hexCount = grid.cells.filter(cell => cell.owner === empire.id).length;
+    const camp = grid.cells.filter(cell => cell.owner === empire.id).at(empire.id === 0 ? 0 : -1);
+    if (camp) setBuilding(state, camp, createBuilding(state, 'trench', 1, 0));
+    setTroops(state, empire.id, empire.soldiers);
+  }
   return state;
 }
 
@@ -78,6 +86,59 @@ describe('min heap', () => {
 });
 
 describe('SendTroops', () => {
+  test('every send is a new group marching from the nearest encampment with troops', () => {
+    const state = makeState(cell => (cell.q < WIDTH / 2 ? 0 : 1), {});
+    const near = gridAt(state.grid, { q: 8, r: 2 })!;
+    setBuilding(state, near, createBuilding(state, 'fort', 1, 0));
+    near.building!.garrison = 10;
+    state.empires[0]!.soldiers += 10;
+    attack(state, 0, { q: 10, r: 2 }, 100);
+    attack(state, 0, { q: 10, r: 2 }, 0);
+    const [group] = state.offensives;
+    expect(state.offensives).toHaveLength(1);
+    expect(group!.mission).toBe('attack');
+    expect(group!.march!.from).toEqual({ q: 8, r: 2 });
+    expect(near.building!.garrison).toBe(0);
+    setTroops(state, 0, 40);
+    attack(state, 0, { q: 10, r: 5 }, 50);
+    expect(state.offensives).toHaveLength(2);
+    expect(group!.focus).toEqual({ q: 10, r: 2 });
+  });
+
+  test('a city houses a militia of three until real encampments exist', () => {
+    const state = rivals();
+    const city = gridAt(state.grid, { q: 2, r: 2 })!;
+    setBuilding(state, city, createBuilding(state, 'city', 1, 0));
+    state.empires[0]!.soldiers = 0;
+    addToEncampments(state, 0, 3);
+    expect(city.building!.garrison).toBe(3);
+    const fort = gridAt(state.grid, { q: 4, r: 2 })!;
+    setBuilding(state, fort, createBuilding(state, 'fort', 1, 0));
+    addToEncampments(state, 0, 5);
+    expect(city.building!.garrison).toBe(3);
+    expect(fort.building!.garrison).toBe(5);
+  });
+
+  test('an empire with no encampment raises no free fort', () => {
+    const state = rivals();
+    for (const cell of state.grid.cells) if (cell.owner === 0) setBuilding(state, cell, null);
+    state.empires[0]!.soldiers = 0;
+    addToEncampments(state, 0, 30);
+    expect(state.grid.cells.some(cell => cell.owner === 0 && cell.building)).toBe(false);
+    expect(state.empires[0]!.soldiers).toBe(0);
+  });
+
+  test('a short encampment is topped up from the next nearest', () => {
+    const state = rivals();
+    const near = gridAt(state.grid, { q: 8, r: 2 })!;
+    setBuilding(state, near, createBuilding(state, 'fort', 1, 0));
+    near.building!.garrison = 10;
+    state.empires[0]!.soldiers += 10;
+    const drawn = drawFromEncampments(state, 0, { q: 10, r: 2 }, 60);
+    expect(drawn).toEqual({ from: { q: 8, r: 2 }, troops: 60 });
+    expect(state.empires[0]!.soldiers).toBe(50);
+  });
+
   test('commits a share of the reserve to one wave', () => {
     const state = rivals();
     expect(attack(state, 0, { q: 10, r: 2 }).ok).toBe(true);
@@ -87,13 +148,21 @@ describe('SendTroops', () => {
     expect(state.empires[0]!.soldiers).toBe(50);
   });
 
-  test('sending again reinforces the same wave and moves its focus', () => {
-    const state = rivals();
-    attack(state, 0, { q: 10, r: 2 });
-    attack(state, 0, { q: 10, r: 5 }, 100);
-    expect(state.offensives).toHaveLength(1);
-    expect(state.offensives[0]!.troops).toBe(100);
-    expect(state.offensives[0]!.focus).toEqual({ q: 10, r: 5 });
+  test('sending somewhere distant leaves the first wave on its mission', () => {
+    const state = makeState(cell => (cell.q < WIDTH / 2 ? 0 : 1), {});
+    place(state, { q: 0, r: 2 }, 'barracks');
+    gridAt(state.grid, { q: 0, r: 2 })!.owner = 0;
+    attack(state, 0, { q: 10, r: 0 });
+    const first = state.offensives[0]!;
+    const { march } = first;
+    const recent = [...first.recent];
+    attack(state, 0, { q: 19, r: 5 });
+    expect(state.offensives).toHaveLength(2);
+    expect(first.focus).toEqual({ q: 10, r: 0 });
+    expect(first.march).toBe(march);
+    expect(first.recent).toEqual(recent);
+    expect(first.troops).toBe(50);
+    expect(state.offensives[1]!.troops).toBe(25);
   });
 
   test('an unreached nation sends a wave into the wild toward it instead', () => {
@@ -108,11 +177,11 @@ describe('SendTroops', () => {
     const state = rivals();
     expect(attack(state, 0, { q: 1, r: 1 }).ok).toBe(false);
 
-    state.empires[0]!.soldiers = 0;
+    setTroops(state, 0, 0);
     const empty = attack(state, 0, { q: 10, r: 1 });
     expect(!empty.ok && empty.reason).toBe('insufficient_troops');
 
-    state.empires[0]!.soldiers = 100;
+    setTroops(state, 0, 100);
     state.empires[0]!.alive = false;
     const dead = attack(state, 0, { q: 10, r: 1 });
     expect(!dead.ok && dead.reason).toBe('no_empire');
@@ -160,7 +229,7 @@ describe('claiming the wild', () => {
 
   test('a wave stops when its troops run out', () => {
     const state = wild();
-    state.empires[0]!.soldiers = 1;
+    setTroops(state, 0, 1);
     attack(state, 0, { q: 1, r: 2 }, 100);
     run(state, 30);
     expect(state.offensives).toHaveLength(0);
@@ -171,8 +240,8 @@ describe('claiming the wild', () => {
   test('more troops advance faster', () => {
     const small = wild();
     const large = wild();
-    small.empires[0]!.soldiers = 10;
-    large.empires[0]!.soldiers = 1000;
+    setTroops(small, 0, 10);
+    setTroops(large, 0, 1000);
     attack(small, 0, { q: 1, r: 2 }, 100);
     attack(large, 0, { q: 1, r: 2 }, 100);
     run(small, 1);
@@ -236,8 +305,8 @@ describe('attacking nations', () => {
 
   test('a heavily garrisoned enemy stops a small wave', () => {
     const state = rivals();
-    state.empires[0]!.soldiers = 4;
-    state.empires[1]!.soldiers = 10_000;
+    setTroops(state, 0, 4);
+    setTroops(state, 1, 10_000);
     attack(state, 0, { q: 10, r: 2 }, 100);
     run(state, 10);
     expect(state.offensives).toHaveLength(0);
@@ -253,14 +322,53 @@ describe('attacking nations', () => {
     expect(state.offensives[1]!.troops).toBe(30);
   });
 
-  test('recalling a wave returns troops less the penalty', () => {
+  test('retreating applies the penalty and walks the troops home', () => {
+    const state = rivals();
+    place(state, { q: 1, r: 2 }, 'barracks');
+    attack(state, 0, { q: 10, r: 2 }, 100);
+    const offensive = state.offensives[0]!;
+    expect(dispatch(state, { type: 'RecallOffensive', empire: 1, offensive: offensive.id }).ok).toBe(false);
+    expect(dispatch(state, { type: 'RecallOffensive', empire: 0, offensive: offensive.id }).ok).toBe(true);
+    expect(offensive.mission).toBe('retreat');
+    expect(offensive.troops).toBeCloseTo(75, 6);
+    run(state, 120);
+    expect(state.offensives).toHaveLength(0);
+    expect(state.empires[0]!.soldiers).toBeGreaterThanOrEqual(75);
+  });
+
+  test('a held group does not capture land and keeps its mission', () => {
+    const state = rivals();
+    attack(state, 0, { q: 10, r: 2 }, 100);
+    const offensive = state.offensives[0]!;
+    const result = dispatch(state, { type: 'OrderOffensive', empire: 0, offensive: offensive.id, target: { q: 3, r: 2 } });
+    expect(result.ok).toBe(true);
+    expect(offensive.mission).toBe('hold');
+    run(state, 120);
+    expect(state.offensives).toHaveLength(1);
+    expect(offensive.taken).toBe(0);
+    expect(offensive.head).toEqual({ q: 3, r: 2 });
+    expect(owned(state, 1)).toBe(WIDTH * HEIGHT / 2);
+  });
+
+  test('ordering onto enemy land turns a held group back into an attack', () => {
+    const state = rivals();
+    attack(state, 0, { q: 10, r: 2 }, 100);
+    const offensive = state.offensives[0]!;
+    dispatch(state, { type: 'OrderOffensive', empire: 0, offensive: offensive.id, target: { q: 3, r: 2 } });
+    dispatch(state, { type: 'OrderOffensive', empire: 0, offensive: offensive.id, target: { q: 12, r: 2 } });
+    expect(offensive.mission).toBe('attack');
+    expect(offensive.focus).toEqual({ q: 12, r: 2 });
+    run(state, 30);
+    expect(offensive.taken).toBeGreaterThan(0);
+  });
+
+  test('orders are refused for foreign groups and water-less bad targets', () => {
     const state = rivals();
     attack(state, 0, { q: 10, r: 2 }, 100);
     const { id } = state.offensives[0]!;
-    expect(dispatch(state, { type: 'RecallOffensive', empire: 1, offensive: id }).ok).toBe(false);
-    expect(dispatch(state, { type: 'RecallOffensive', empire: 0, offensive: id }).ok).toBe(true);
-    expect(state.offensives).toHaveLength(0);
-    expect(state.empires[0]!.soldiers).toBe(75);
+    expect(dispatch(state, { type: 'OrderOffensive', empire: 1, offensive: id, target: { q: 3, r: 2 } }).ok).toBe(false);
+    expect(dispatch(state, { type: 'OrderOffensive', empire: 0, offensive: id, target: { q: 99, r: 99 } }).ok).toBe(false);
+    expect(dispatch(state, { type: 'OrderOffensive', empire: 0, offensive: 999, target: { q: 3, r: 2 } }).ok).toBe(false);
   });
 
   test('recall is refused to a dead empire', () => {
@@ -269,6 +377,144 @@ describe('attacking nations', () => {
     state.empires[0]!.alive = false;
     const result = dispatch(state, { type: 'RecallOffensive', empire: 0, offensive: state.offensives[0]!.id });
     expect(!result.ok && result.reason).toBe('no_empire');
+  });
+});
+
+describe('tile health', () => {
+  const tile = { q: 10, r: 2 };
+
+  function siege(troops: number, defending = 0, wave: Partial<WaveConfig> = FAST_WAVES) {
+    const state = makeState(cell => (cell.q < WIDTH / 2 ? 0 : 1), wave);
+    launchOffensive(state, 0, 1, tile, troops);
+    const attacker = state.offensives[0]!;
+    attacker.captureTile = gridIndex(state.grid, tile.q, tile.r);
+    if (defending > 0) addDefender(state, tile, defending);
+    return { state, attacker };
+  }
+
+  function addDefender(state: GameState, head: Axial, troops: number): Offensive {
+    const defender: Offensive = {
+      ...state.offensives[0]!,
+      id: state.nextOffensiveId++,
+      empire: 1,
+      target: 0,
+      mission: 'hold' as const,
+      troops,
+      head,
+      march: null,
+      captureTile: undefined,
+      captureHealth: undefined,
+      captureHitAt: undefined,
+      frontier: createMinHeap(),
+      queued: new Set<number>(),
+      recent: [head],
+    };
+    state.offensives.push(defender);
+    return defender;
+  }
+
+  const captured = (state: GameState): boolean => gridAt(state.grid, tile)!.owner === 0;
+
+  test('only the surplus over the defenders hurts the tile: 30 against 29', () => {
+    const { state, attacker } = siege(30, 29);
+    const health = state.config.wave.tileHealth;
+    run(state, 1);
+    expect(attacker.captureHealth).toBeCloseTo(health - state.config.wave.tileDamagePerTroop, 1);
+    run(state, 1.5);
+    expect(captured(state)).toBe(false);
+    run(state, 1);
+    expect(captured(state)).toBe(true);
+  });
+
+  test('an undefended wave keeps its pace at any size', () => {
+    for (const troops of [10, 30, 100, 1000]) {
+      const paused = siege(troops);
+      const unpaused = siege(troops, 0, { ...FAST_WAVES, tileHealth: 0 });
+      run(paused.state, 1);
+      run(unpaused.state, 1);
+      expect(unpaused.attacker.taken).toBeGreaterThan(0);
+      expect(paused.attacker.taken).toBeGreaterThanOrEqual(unpaused.attacker.taken - 1);
+    }
+  });
+
+  test('neutral land has no pause', () => {
+    const state = wild();
+    launchOffensive(state, 0, NEUTRAL_OWNER, { q: 1, r: 2 }, 100);
+    run(state, 1);
+    expect(owned(state, 0)).toBeGreaterThan(HEIGHT);
+    expect(state.offensives[0]!.captureHealth).toBeUndefined();
+  });
+
+  test('equal defenders hold the tile while both sides take casualties', () => {
+    const { state, attacker } = siege(25, 25);
+    const defender = state.offensives[1]!;
+    run(state, 5);
+    expect(captured(state)).toBe(false);
+    expect(attacker.captureHealth).toBe(state.config.wave.tileHealth);
+    expect(attacker.troops).toBeLessThan(25);
+    expect(defender.troops).toBeCloseTo(attacker.troops, 6);
+  });
+
+  test('a fight to the last troop ends the stalemate', () => {
+    const { state } = siege(5, 5);
+    run(state, 10);
+    expect(state.offensives).toHaveLength(0);
+    expect(captured(state)).toBe(false);
+  });
+
+  test('health heals at once when defenders remove the surplus', () => {
+    const { state, attacker } = siege(30, 29);
+    run(state, 1);
+    expect(attacker.captureHealth).toBeLessThan(state.config.wave.tileHealth);
+    state.offensives[1]!.troops += 5;
+    step(state, FIXED_DT);
+    expect(attacker.captureHealth).toBe(state.config.wave.tileHealth);
+  });
+
+  test('health survives reinforcement while the attack continues', () => {
+    const { state, attacker } = siege(30, 29);
+    run(state, 1);
+    const before = attacker.captureHealth!;
+    attacker.troops += 5;
+    expect(attacker.captureHealth).toBe(before);
+    step(state, FIXED_DT);
+    expect(attacker.captureHealth).toBeLessThan(before);
+  });
+
+  test('health heals after a lull but not before it', () => {
+    const { tileHealSeconds, tileHealth } = DEFAULT_GAME_CONFIG.wave;
+    const pause = (seconds: number) => {
+      const { state, attacker } = siege(30, 29);
+      run(state, 1);
+      const before = attacker.captureHealth!;
+      attacker.march = { from: tile, to: tile, duration: seconds, progress: 0 };
+      run(state, seconds - FIXED_DT);
+      return { state, attacker, before };
+    };
+
+    const short = pause(tileHealSeconds / 2);
+    run(short.state, FIXED_DT * 2);
+    expect(short.attacker.captureHealth).toBeLessThan(short.before);
+
+    const long = pause(tileHealSeconds + 1);
+    run(long.state, FIXED_DT * 2);
+    expect(long.attacker.captureHealth).toBeGreaterThan(long.before);
+    expect(long.attacker.captureHealth).toBeLessThan(tileHealth);
+  });
+
+  test('defenders count within two hexes, marching or not, and never for neutral land', () => {
+    const state = rivals();
+    launchOffensive(state, 0, 1, tile, 10);
+    const cell = gridAt(state.grid, tile)!;
+    addDefender(state, { q: 12, r: 2 }, 7);
+    addDefender(state, { q: 13, r: 2 }, 11);
+    const far = addDefender(state, { q: 18, r: 2 }, 13);
+    far.march = { from: far.head, to: tile, duration: 10, progress: 0 };
+    expect(defendersAt(state, cell, 0)).toBe(7);
+    far.head = { q: 11, r: 2 };
+    expect(defendersAt(state, cell, 0)).toBe(20);
+    cell.owner = NEUTRAL_OWNER;
+    expect(defendersAt(state, cell, 0)).toBe(0);
   });
 });
 
@@ -371,11 +617,56 @@ describe('defensive works', () => {
 });
 
 describe('troop capacity', () => {
-  test('territory raises the reserve cap', () => {
+  test('capacity comes only from finished encampments', () => {
     const state = rivals();
-    const before = owned(state, 0);
+    for (const cell of state.grid.cells) if (cell.owner === 0) setBuilding(state, cell, null);
+    state.empires[0]!.bonuses = emptyModifierTotals();
+    setBuilding(state, gridAt(state.grid, { q: 2, r: 2 })!, createBuilding(state, 'city', 1, 0));
+    setBuilding(state, gridAt(state.grid, { q: 4, r: 2 })!, createBuilding(state, 'fort', 1, 0));
     step(state, FIXED_DT);
-    expect(state.empires[0]!.reserveCap).toBe(Math.floor(before * state.config.recruit.troopsPerTile));
+    expect(state.empires[0]!.reserveCap).toBe(23);
+  });
+
+  test('troops die when an encampment is lost and capacity falls', () => {
+    const state = rivals();
+    for (const cell of state.grid.cells) if (cell.owner === 0) setBuilding(state, cell, null);
+    state.empires[0]!.bonuses = emptyModifierTotals();
+    const city = gridAt(state.grid, { q: 2, r: 2 })!;
+    const fort = gridAt(state.grid, { q: 4, r: 2 })!;
+    setBuilding(state, city, createBuilding(state, 'city', 1, 0));
+    setBuilding(state, fort, createBuilding(state, 'fort', 1, 0));
+    city.building!.garrison = 3;
+    fort.building!.garrison = 20;
+    setBuilding(state, fort, null);
+    step(state, FIXED_DT);
+    expect(state.empires[0]!.soldiers).toBeLessThanOrEqual(3);
+  });
+
+  test('deployed troops count against capacity and die last', () => {
+    const state = rivals();
+    for (const cell of state.grid.cells) if (cell.owner === 0) setBuilding(state, cell, null);
+    state.empires[0]!.bonuses = emptyModifierTotals();
+    const city = gridAt(state.grid, { q: 2, r: 2 })!;
+    setBuilding(state, city, createBuilding(state, 'city', 1, 0));
+    city.building!.garrison = 3;
+    state.empires[0]!.soldiers = 3;
+    expect(attack(state, 0, { q: 10, r: 2 }, 100).ok).toBe(true);
+    const group = state.offensives[0]!;
+    group.troops = 10;
+    killExcessTroops(state, 0);
+    expect(group.troops).toBe(3);
+  });
+
+  test('returning troops beyond capacity are lost', () => {
+    const state = rivals();
+    for (const cell of state.grid.cells) if (cell.owner === 0) setBuilding(state, cell, null);
+    state.empires[0]!.bonuses = emptyModifierTotals();
+    const city = gridAt(state.grid, { q: 2, r: 2 })!;
+    setBuilding(state, city, createBuilding(state, 'city', 1, 0));
+    state.empires[0]!.soldiers = 0;
+    addToEncampments(state, 0, 50);
+    expect(city.building!.garrison).toBe(3);
+    expect(state.empires[0]!.soldiers).toBe(3);
   });
 });
 
@@ -392,6 +683,40 @@ describe('people on the map', () => {
     expect(owned(state, 0)).toBe(before);
     expect(state.offensives[0]!.head.q).toBeGreaterThan(0);
     run(state, march.duration / 2 + 5);
+    expect(owned(state, 0)).toBeGreaterThan(before);
+  });
+
+  test('soldiers stay on the map from launch through arrival to the first capture', () => {
+    const state = makeState(wildOwner, {});
+    place(state, { q: 0, r: 2 }, 'barracks');
+    gridAt(state.grid, { q: 0, r: 2 })!.owner = 0;
+    attack(state, 0, { q: 10, r: 2 }, 100);
+    const offensive = state.offensives[0]!;
+    const before = owned(state, 0);
+    expect(offensive.recent.length).toBeGreaterThan(0);
+    for (let i = 0; i < 60 / FIXED_DT && owned(state, 0) === before; i++) {
+      step(state, FIXED_DT);
+      expect(offensive.recent.length).toBeGreaterThan(0);
+    }
+    expect(owned(state, 0)).toBeGreaterThan(before);
+  });
+
+  test('a wave with no march starts at the border, not nowhere', () => {
+    const state = wild();
+    attack(state, 0, { q: 10, r: 2 });
+    expect(state.offensives[0]!.march).toBeNull();
+    expect(state.offensives[0]!.recent).toHaveLength(1);
+  });
+
+  test('a wave whose frontier was used up finds the land that is left', () => {
+    const state = rivals();
+    attack(state, 0, { q: 10, r: 2 }, 100);
+    const offensive = state.offensives[0]!;
+    const before = owned(state, 0);
+    heapClear(offensive.frontier);
+    offensive.queued.clear();
+    run(state, 1);
+    expect(state.offensives).toContain(offensive);
     expect(owned(state, 0)).toBeGreaterThan(before);
   });
 
@@ -415,6 +740,7 @@ describe('people on the map', () => {
 
   test('a site with no way home is built on the spot', () => {
     const state = rivals();
+    for (const cell of state.grid.cells) if (cell.building) setBuilding(state, cell, null);
     const site = gridAt(state.grid, { q: 6, r: 2 })!;
     setBuilding(state, site, createBuilding(state, 'farm', 1, 1));
     run(state, 2);

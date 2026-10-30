@@ -1,5 +1,6 @@
-import { testEmpire, clearStaging } from '../support/fixture';
+import { testEmpire, clearStaging, setTroops } from '../support/fixture';
 import { labelWorld } from '@the-big-war/client/game/map/world-labels.service';
+import { garrisonedTroops } from '@the-big-war/client/game/trench/trench.service';
 import { createWorldIndex, setBuilding, setOwner } from '@the-big-war/client/game/map/world-index.service';
 
 
@@ -292,11 +293,12 @@ describe('Trenches', () => {
 
   test('ManTrench moves reserve troops in up to capacity', () => {
     const state = makeState();
+    setTroops(state, 0, 100);
     const trench = dug(state);
     const result = dispatch(state, { type: 'ManTrench', empire: 0, hex: trenchHex, percent: 100 });
     expect(result.ok).toBe(true);
     expect(trench.garrison).toBe(state.config.trench.capacity);
-    expect(state.empires[0]!.soldiers).toBe(100 - state.config.trench.capacity);
+    expect(state.empires[0]!.soldiers).toBe(100);
 
     const full = dispatch(state, { type: 'ManTrench', empire: 0, hex: trenchHex, percent: 100 });
     expect(full.ok).toBe(false);
@@ -308,12 +310,16 @@ describe('Trenches', () => {
 
   test('LeaveTrench returns troops to the reserve', () => {
     const state = makeState();
+    setTroops(state, 0, 100);
+    state.empires[0]!.bonuses.reserveCap.mul *= 2;
     const trench = dug(state);
     trench.garrison = 10;
+    state.empires[0]!.soldiers += 10;
     const result = dispatch(state, { type: 'LeaveTrench', empire: 0, hex: trenchHex, percent: 100 });
     expect(result.ok).toBe(true);
     expect(trench.garrison).toBe(0);
     expect(state.empires[0]!.soldiers).toBe(110);
+    expect(garrisonedTroops(state, 0)).toBe(110);
   });
 
 });
@@ -346,6 +352,7 @@ describe('FireCannon', () => {
   test('fires within range, starts the cooldown, and shells enemy attacks near the target', () => {
     const state = makeState();
     clearStaging(state);
+    setTroops(state, 1, 100);
     const edge = borderEdge(state, 0, 1);
     const cannonHex = { q: edge.a.q - 1, r: edge.a.r };
     setBuilding(state, gridAt(state.grid, cannonHex)!, makeBuilding(state, 'cannon'));
@@ -534,9 +541,9 @@ describe('speed, pause and log helpers', () => {
     emit({ type: 'SelectFaction', empire: 9, factionId: 'ironclad' });
     emit({ type: 'PlaceBuilding', empire: 0, hex: { q: 3, r: 2 }, kind: 'cannon' });
     const edge = borderEdge(state, 0, 1);
-    state.empires[0]!.soldiers = 0;
+    setTroops(state, 0, 0);
     emit({ type: 'SendTroops', empire: 0, target: edge.b, percent: 50 });
-    state.empires[0]!.soldiers = 100;
+    setTroops(state, 0, 100);
     state.empires[0]!.science = 0;
     emit({ type: 'StartResearch', empire: 0, nodeId: 'drill' });
     state.empires[0]!.gold = 0;

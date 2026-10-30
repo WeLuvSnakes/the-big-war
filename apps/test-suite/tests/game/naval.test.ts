@@ -1,5 +1,5 @@
-import { testEmpire } from '../support/fixture';
 import { describe, expect, test } from 'bun:test';
+import { setTroops, testEmpire } from '../support/fixture';
 import type { Ship } from '@the-big-war/client/game/ship/ship.types';
 import type { HexCell } from '@the-big-war/client/game/map/map.types';
 import { isWater } from '@the-big-war/client/game/map/terrain.service';
@@ -44,6 +44,7 @@ function seaState(): GameState {
   for (const cell of grid.cells) if (cell.q <= WEST_COAST) setOwner(state, cell, 0);
   for (const cell of grid.cells) if (cell.q >= EAST_COAST + 4) setOwner(state, cell, 1);
   for (const empire of state.empires) empire.hexCount = grid.cells.filter(cell => cell.owner === empire.id).length;
+  for (const empire of state.empires) setTroops(state, empire.id, empire.soldiers);
   return state;
 }
 

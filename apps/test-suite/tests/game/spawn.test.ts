@@ -16,7 +16,7 @@ describe('ChooseSpawn', () => {
     })!;
     expect(target.owner).toBe(0);
     expect(target.building?.kind).toBe('city');
-    expect(state.grid.cells.filter(cell => cell.owner === 0 && cell.building).length).toBe(1);
+    expect(state.grid.cells.filter(cell => cell.owner === 0 && cell.building?.kind === 'city' && cell.building).length).toBe(1);
   });
 
   test('refuses water and rival land, and refuses once the match has run', () => {

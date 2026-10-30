@@ -13,9 +13,12 @@ import { dispatch } from '@the-big-war/client/game/commands/commands.service';
 import { step } from '@the-big-war/client/game/simulation/simulation.service';
 import type { GameConfig } from '@the-big-war/client/game/config/config.types';
 import type { HexCell, HexGrid } from '@the-big-war/client/game/map/map.types';
+import type { Command } from '@the-big-war/client/game/commands/commands.types';
 import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants';
 import type { Building } from '@the-big-war/client/game/building/building.types';
 import { FIXED_DT } from '@the-big-war/game-engine/simulation/simulation.constants';
+import type { Offensive } from '@the-big-war/client/game/offensive/offensive.types';
+import { createMinHeap } from '@the-big-war/game-engine/collections/min-heap.service';
 import { RESEARCH_NODES } from '@the-big-war/client/game/research/research.constants';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
 import { gridAt, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
@@ -428,3 +431,86 @@ describe('bot diplomacy & naval actions', () => {
   });
 });
 
+
+function fort(state: GameState, garrison: number): Building {
+  return { ...city(state), kind: 'fort', garrison };
+}
+
+function enemyOffensive(id: number, head: { q: number; r: number }, mission: Offensive['mission'] = 'attack'): Offensive {
+  return {
+    id, empire: 2, target: 1, troops: 8, focus: head, head, march: null, mission,
+    budget: 0, order: 0, taken: 0, frontier: createMinHeap(), queued: new Set(), recent: [],
+  } as Offensive;
+}
+
+function ownGroup(id: number, focus: { q: number; r: number }, mission: Offensive['mission'] = 'attack'): Offensive {
+  return {
+    id, empire: 1, target: 2, troops: 5, focus, head: focus, march: null, mission,
+    budget: 0, order: 0, taken: 0, frontier: createMinHeap(), queued: new Set(), recent: [],
+  } as Offensive;
+}
+
+function defenceState(): GameState {
+  const state = makeState();
+  const empire = state.empires[1]!;
+  empire.soldiers = 100;
+  empire.reserveCap = 500;
+  empire.gold = 0;
+  setBuilding(state, gridAt(state.grid, { q: 3, r: 2 })!, fort(state, 10));
+  setBuilding(state, gridAt(state.grid, { q: 5, r: 4 })!, fort(state, 3));
+  declareWar(state, 1, 2);
+  state.offensives.push(enemyOffensive(90, { q: 6, r: 3 }));
+  return state;
+}
+
+describe('bot defence', () => {
+  test('does not react instantly, then sends a group and orders it to hold', () => {
+    const state = defenceState();
+    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.9, economy: 0.1 } });
+    expect(botTick(bot, state, 0.5).some(command => command.type === 'SendTroops')).toBe(false);
+    let send: Command | undefined;
+    for (let i = 0; i < 20 && !send; i++) send = botTick(bot, state, 0.5).find(command => command.type === 'SendTroops');
+    expect(send).toBeDefined();
+    expect(bot.clock).toBeLessThanOrEqual(BOT_TUNING.defenceReactionDelay + BOT_TUNING.defenceReactionJitter + 1.5);
+    state.offensives.push(ownGroup(91, { q: 6, r: 4 }));
+    const order = botTick(bot, state, 0.5).find(command => command.type === 'OrderOffensive');
+    expect(order).toEqual({ type: 'OrderOffensive', empire: 1, offensive: 91, target: { q: 5, r: 4 } });
+  });
+
+  test('defence takes priority over a new attack', () => {
+    const state = defenceState();
+    state.empires[1]!.soldiers = 400;
+    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 1, economy: 0 } });
+    const sends = botTick(bot, state, 0.5).filter(command => command.type === 'SendTroops');
+    expect(sends).toHaveLength(0);
+  });
+
+  test('is deterministic for a fixed seed', () => {
+    const run = (): string[] => {
+      const state = defenceState();
+      const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.9, economy: 0.1 } });
+      const out: string[] = [];
+      for (let i = 0; i < 12; i++) out.push(JSON.stringify(botTick(bot, state, 0.5)));
+      return out;
+    };
+    expect(run()).toEqual(run());
+  });
+});
+
+describe('bot attack groups', () => {
+  test('never starts more than the tuned number of attack groups', () => {
+    const state = makeState();
+    state.empires[1]!.soldiers = 400;
+    state.empires[1]!.reserveCap = 500;
+    declareWar(state, 1, 2);
+    for (let i = 0; i < BOT_TUNING.maxAttackGroups; i++) state.offensives.push(ownGroup(10 + i, { q: 6, r: i }));
+    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 1, economy: 0 } });
+    for (let i = 0; i < 40; i++) {
+      const commands = botTick(bot, state, 0.5);
+      expect(commands.some(command => command.type === 'SendTroops')).toBe(false);
+      for (const command of commands) {
+        if (command.type === 'OrderOffensive') expect(state.offensives.some(item => item.id === command.offensive)).toBe(true);
+      }
+    }
+  });
+});

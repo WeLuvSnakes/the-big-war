@@ -1,5 +1,5 @@
-import { testEmpire } from '../support/fixture';
 import { describe, expect, test } from 'bun:test';
+import { testEmpire, setTroops } from '../support/fixture';
 import { createRng } from '@the-big-war/game-engine/rng/rng.service';
 import type { Empire } from '@the-big-war/client/game/empire/empire.types';
 import type { GameState } from '@the-big-war/client/game/state/state.types';
@@ -86,6 +86,7 @@ describe('diplomacy contracts', () => {
 
   test('attacking another nation declares war', () => {
     const state = createTestState();
+    setTroops(state, 0, 100);
     const result = dispatch(state, {
       type: 'SendTroops',
       empire: 0,
@@ -110,6 +111,7 @@ describe('diplomacy contracts', () => {
 
   test('offer peace during war dissolves fronts and starts a treaty', () => {
     const state = createTestState();
+    setTroops(state, 0, 100);
     
     dispatch(state, {
       type: 'SendTroops',
@@ -119,7 +121,7 @@ describe('diplomacy contracts', () => {
     });
     expect(state.offensives.length).toBe(1);
     expect(state.empires[0]!.soldiers).toBe(50);
-    state.empires[1]!.soldiers = 40;
+    setTroops(state, 1, 40);
 
     const peaceResult = dispatch(state, {
       type: 'OfferPeace',
@@ -158,7 +160,7 @@ describe('diplomacy contracts', () => {
   test('a much stronger bot rejects peace and the offer goes on cooldown', () => {
     const state = createTestState();
     declareWar(state, 0, 1);
-    state.empires[0]!.soldiers = 10;
+    setTroops(state, 0, 10);
 
     const first = dispatch(state, { type: 'OfferPeace', empire: 0, target: 1 });
     expect(first.ok).toBe(false);
@@ -240,8 +242,8 @@ describe('diplomacy contracts', () => {
     const calm = createTestState({ bot: { ...DEFAULT_GAME_CONFIG.bot, aggression: 0.2 } });
     const angry = createTestState({ bot: { ...DEFAULT_GAME_CONFIG.bot, aggression: 0.8 } });
     for (const state of [calm, angry]) {
-      state.empires[0]!.soldiers = 80;
-      state.empires[1]!.soldiers = 100;
+      setTroops(state, 0, 80);
+      setTroops(state, 1, 100);
     }
     expect(acceptsOffer(calm, 0, 1)).toBe(true);
     expect(acceptsOffer(angry, 0, 1)).toBe(false);

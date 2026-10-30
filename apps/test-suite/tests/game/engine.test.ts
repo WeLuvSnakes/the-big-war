@@ -1,4 +1,4 @@
-import { testEmpire } from '../support/fixture';
+import { testEmpire, setTroops } from '../support/fixture';
 import { labelWorld } from '@the-big-war/client/game/map/world-labels.service';
 import { createWorldIndex, setBuilding, setOwner } from '@the-big-war/client/game/map/world-index.service';
 
@@ -11,9 +11,9 @@ import { createBot, botTick } from '@the-big-war/client/game/bot/bot.service';
 import { dispatch } from '@the-big-war/client/game/commands/commands.service';
 import { step } from '@the-big-war/client/game/simulation/simulation.service';
 import type { GameConfig } from '@the-big-war/client/game/config/config.types';
-import { deployedTroops } from '@the-big-war/client/game/troops/troops.service';
 import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants';
 import { createInitialState } from '@the-big-war/client/game/state/setup.service';
+import { garrisonedTroops } from '@the-big-war/client/game/trench/trench.service';
 import { FIXED_DT } from '@the-big-war/game-engine/simulation/simulation.constants';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
 import type { HexCell, HexGrid, Terrain } from '@the-big-war/client/game/map/map.types';
@@ -225,7 +225,7 @@ describe('engine economy', () => {
     poor.empires[0]!.civilians = stateWorkersPerBuilding(poor); 
     for (const s of [rich, poor]) {
       s.empires[0]!.gold = 0;
-      s.empires[0]!.soldiers = 0;
+      setTroops(s, 0, 0);
     }
     run(rich, 1);
     run(poor, 1);
@@ -260,9 +260,9 @@ describe('engine economy', () => {
     const state = makeState();
     const empire = state.empires[0]!;
     empire.civilians = 1000;
-    empire.soldiers = 60;
     empire.bonuses = { ...empire.bonuses, reserveCap: { add: 0, mul: 10 }, growth: { add: 0, mul: 100 } };
     place(state, { q: 1, r: 6 }, 'barracks');
+    setTroops(state, 0, 60);
     run(state, 0.5);
     const civilians = empire.civilians;
     const soldiers = empire.soldiers;
@@ -328,7 +328,7 @@ describe('engine recruitment', () => {
     place(withFort, { q: 0, r: 1 }, 'fort');
     for (const s of [withBarracks, withFort]) {
       s.empires[0]!.civilians = 100;
-      s.empires[0]!.soldiers = 0;
+      setTroops(s, 0, 0);
     }
     run(withBarracks, 1);
     run(withFort, 1);
@@ -357,7 +357,7 @@ describe('engine recruitment', () => {
     const slow = makeState();
     for (const s of [fast, slow]) {
       s.empires[0]!.civilians = 200;
-      s.empires[0]!.soldiers = 0;
+      setTroops(s, 0, 0);
       s.empires[0]!.bonuses = { ...s.empires[0]!.bonuses, reserveCap: { add: 0, mul: 10 }, growth: { add: 0, mul: 100 } };
       place(s, { q: 1, r: 6 }, 'barracks');
     }
@@ -387,21 +387,22 @@ describe('engine field works', () => {
 
   test('garrisons count as deployed, are lost on capture and return on demolish', () => {
     const state = makeState();
+    place(state, { q: 1, r: 6 }, 'fort');
     const trench = place(state, home, 'trench');
     trench.garrison = 7;
-    expect(deployedTroops(state, 0)).toBe(7);
+    expect(garrisonedTroops(state, 0)).toBe(7);
 
     trench.demolishAt = state.elapsed;
-    const reserve = state.empires[0]!.soldiers;
     step(state, FIXED_DT);
     expect(gridAt(state.grid, home)!.building).toBeNull();
-    expect(state.empires[0]!.soldiers).toBeGreaterThanOrEqual(reserve + 7);
+    expect(state.empires[0]!.soldiers).toBeGreaterThanOrEqual(7);
+    expect(garrisonedTroops(state, 0)).toBeGreaterThanOrEqual(7);
 
     const lost = makeState();
     const held = place(lost, home, 'trench');
     held.garrison = 1;
     declareWar(lost, 1, 0);
-    lost.empires[1]!.soldiers = 500;
+    setTroops(lost, 1, 500);
     dispatch(lost, { type: 'SendTroops', empire: 1, target: home, percent: 100 });
     for (let i = 0; i < 2000 && gridAt(lost.grid, home)!.owner === 0; i++) step(lost, FIXED_DT);
     expect(gridAt(lost.grid, home)!.owner).toBe(1);
@@ -440,6 +441,7 @@ describe('engine housekeeping', () => {
     const state = makeState();
     const edge = borderEdge(state, 0, 1);
     declareWar(state, 0, 1);
+    setTroops(state, 0, 100);
     dispatch(state, { type: 'SendTroops', empire: 0, target: edge.b, percent: 10 });
     expect(state.offensives).toHaveLength(1);
     const soldiersBefore = state.empires[1]!.soldiers;
@@ -609,7 +611,7 @@ describe('engine staffing, diplomacy & bot integration', () => {
     expect(getRelation(state, 0, 1).status).toBe('war');
 
     const edge = borderEdge(state, 0, 1);
-    state.empires[0]!.soldiers = 30;
+    setTroops(state, 0, 30);
     dispatch(state, { type: 'SendTroops', empire: 0, target: edge.b, percent: 50 });
     state.empires[0]!.civilians = 0; 
     const soldiers0Before = state.empires[0]!.soldiers;
