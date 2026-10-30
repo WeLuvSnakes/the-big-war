@@ -28,7 +28,7 @@ function buildingState(building: Building): string {
   if (building.kind === 'cannon' && building.cooldown > 0) {
     parts.push(`Reloading ${building.cooldown.toFixed(0)}s`);
   }
-  if (building.kind === 'trench') parts.push(`${Math.floor(building.garrison)} troops`);
+  if (building.kind === 'trench' || building.kind === 'city') parts.push(`${Math.floor(building.garrison)} troops`);
   if (building.machineGun) parts.push('MG');
   if (building.kind === 'farm') parts.push(`+${Math.round(building.growth * 100)}%`);
   if (building.demolishAt !== null) parts.push('Demolish');

@@ -23,6 +23,10 @@ const GATHERER_SCALE = 0.26;
 const GATHERER_COLOR = 0x8a5a2b;
 const REFRESH_FRAMES = 12;
 const FAR_COUNT_PX = 14;
+const SIEGE_BAR_WIDTH = 0.9;
+const SIEGE_BAR_HEIGHT = 0.12;
+const SIEGE_BAR_BACK = 0x1b1330;
+const SIEGE_BAR_FILL = 0xe0483e;
 
 export class SoldiersLayer {
 
@@ -50,7 +54,10 @@ export class SoldiersLayer {
       const detail = tilePx >= DETAIL_TILE_PX;
       if (detail) this.drawGarrisons(state, hexSize, range);
       for (const offensive of state.offensives) {
-        if (detail) this.drawWave(offensive, hexSize, state.elapsed, range);
+        if (detail) {
+          this.drawWave(offensive, hexSize, state.elapsed, range);
+          this.drawSiegeBar(state, offensive, hexSize, range);
+        }
         else this.drawFarWave(offensive, hexSize, tilePx, range);
       }
       if (detail) {
@@ -201,6 +208,28 @@ export class SoldiersLayer {
     this.drawCount(Math.ceil(offensive.troops), color, sumX / count, topY - headroom, hexSize * COUNT_SIZE);
   }
 
+  private drawSiegeBar(state: GameState, offensive: Offensive, hexSize: number, range: HexRange): void {
+    if (offensive.mission !== 'attack') return;
+    const { captureTile, captureHealth } = offensive;
+    const { tileHealth } = state.config.wave;
+    if (captureTile === undefined || captureHealth === undefined || captureHealth >= tileHealth) return;
+    const cell = state.grid.cells[captureTile];
+    if (!cell || !inRange(cell, range)) return;
+    const at = axialToPixel(cell, hexSize);
+    this.drawBarSegment(at.x, at.y, hexSize * SIEGE_BAR_WIDTH, hexSize, SIEGE_BAR_BACK);
+    this.drawBarSegment(at.x, at.y, (hexSize * SIEGE_BAR_WIDTH * captureHealth) / tileHealth, hexSize, SIEGE_BAR_FILL);
+  }
+
+  private drawBarSegment(x: number, y: number, width: number, hexSize: number, tint: number): void {
+    const sprite = this.acquire();
+    sprite.texture = Texture.WHITE;
+    sprite.tint = tint;
+    sprite.width = width;
+    sprite.height = hexSize * SIEGE_BAR_HEIGHT;
+    sprite.position.set(x, y);
+    sprite.zIndex = Number.MAX_SAFE_INTEGER;
+  }
+
   private drawGatherers(hexSize: number, elapsed: number, range: HexRange): void {
     const pixel = (hexSize * GATHERER_SCALE) / SOLDIER_SIZE;
     for (const cell of this.gatherers) {
@@ -251,6 +280,7 @@ export class SoldiersLayer {
       this.container.addChild(sprite);
     }
     sprite.visible = true;
+    sprite.tint = 0xffffff;
     this.used++;
     return sprite;
   }
