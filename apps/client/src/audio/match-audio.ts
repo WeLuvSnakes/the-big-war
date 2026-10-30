@@ -1,7 +1,8 @@
 import { audio } from './audio.service';
 import type { GameState } from '../game/state/state.types';
-import type { GameStore } from '../game/store/store.types';
 import type { MatchSnapshot, SoundId } from './audio.types';
+import type { ClientStore } from '../game/store/store.types';
+import { allBuildingCells } from '../game/map/world-index.service';
 import { pendingOffersTo } from '../game/diplomacy/diplomacy.service';
 
 const SAMPLE_SECONDS = 0.1;
@@ -12,10 +13,7 @@ const MAX_RIFLE_FRONTS = 3;
 
 const playerTroops = (state: GameState): number => {
   let troops = 0;
-  for (const front of state.fronts) {
-    if (front.sideA.empire === state.playerEmpire) troops += front.sideA.troops;
-    if (front.sideB.empire === state.playerEmpire) troops += front.sideB.troops;
-  }
+  for (const offensive of state.offensives) if (offensive.empire === state.playerEmpire) troops += offensive.troops;
   return troops;
 };
 
@@ -23,22 +21,25 @@ export function snapshotMatch(state: GameState): MatchSnapshot {
   const player = state.playerEmpire;
   const cooldowns = new Map<number, number>();
   const ownBuildings = new Map<number, boolean>();
-  for (const cell of state.grid.cells) {
+  for (const cell of allBuildingCells(state)) {
     const building = cell.building;
     if (!building) continue;
     if (building.kind === 'cannon' || building.kind === 'battery') cooldowns.set(building.id, building.cooldown);
     if (cell.owner === player) ownBuildings.set(building.id, building.buildRemaining <= 0);
   }
+  const ownShips = new Map<number, number>();
+  for (const ship of state.ships) if (ship.empire === player) ownShips.set(ship.id, ship.cooldown);
   const empire = state.empires.find(item => item.id === player);
   return {
     hexes: empire?.hexCount ?? 0,
     research: empire?.research.completed.length ?? 0,
     offers: pendingOffersTo(state, player).length,
-    playerFronts: state.fronts.filter(front => front.sideA.empire === player || front.sideB.empire === player).length,
+    playerFronts: state.offensives.filter(item => item.empire === player || item.target === player).length,
     frontTroops: playerTroops(state),
     aliveEmpires: state.empires.filter(item => item.alive).length,
     cooldowns,
     ownBuildings,
+    ownShips,
   };
 }
 
@@ -52,6 +53,13 @@ export function diffSounds(previous: MatchSnapshot, next: MatchSnapshot): readon
   if (next.playerFronts >= previous.playerFronts && next.frontTroops < previous.frontTroops) sounds.push('pain');
   if (next.aliveEmpires < previous.aliveEmpires) sounds.push('elimination');
 
+  for (const [id, cooldown] of next.ownShips) {
+    const before = previous.ownShips.get(id);
+    if (before === undefined) sounds.push('shipHorn');
+    else if (cooldown > before) sounds.push('shipGun');
+  }
+  for (const id of previous.ownShips.keys()) if (!next.ownShips.has(id)) sounds.push('shipSunk');
+
   for (const [id, ready] of next.ownBuildings) {
     const before = previous.ownBuildings.get(id);
     if (before === undefined && !ready) sounds.push('build');
@@ -64,7 +72,7 @@ export function diffSounds(previous: MatchSnapshot, next: MatchSnapshot): readon
   return sounds;
 }
 
-export function createMatchAudio(store: GameStore) {
+export function createMatchAudio(store: ClientStore) {
   let previous = snapshotMatch(store.state);
   let sampleIn = SAMPLE_SECONDS;
   let rifleIn = 0;

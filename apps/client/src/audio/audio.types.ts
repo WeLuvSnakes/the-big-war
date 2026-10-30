@@ -15,7 +15,10 @@ export type SoundId =
   | 'offer'
   | 'elimination'
   | 'victory'
-  | 'defeat';
+  | 'defeat'
+  | 'shipHorn'
+  | 'shipGun'
+  | 'shipSunk';
 
 export type Mood = 'menu' | 'peace' | 'war' | 'aftermath';
 
@@ -66,5 +69,6 @@ export interface MatchSnapshot {
   readonly aliveEmpires: number;
   readonly cooldowns: ReadonlyMap<number, number>;
   readonly ownBuildings: ReadonlyMap<number, boolean>;
+  readonly ownShips: ReadonlyMap<number, number>;
 }
 

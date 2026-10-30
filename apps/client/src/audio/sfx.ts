@@ -151,4 +151,16 @@ export const SFX: Readonly<Record<SoundId, (target: SfxTarget) => void>> = {
   },
   victory: t => fanfare(t, [294, 370, 440, 587, 440, 587, 740], 0.2),
   defeat: t => fanfare(t, [440, 349, 294, 220], 0.45),
+  shipHorn: t => {
+    tone(t, { type: 'sawtooth', from: 110, seconds: 0.9, gain: 0.16 });
+    tone(t, { type: 'sawtooth', from: 165, seconds: 0.9, gain: 0.1 });
+  },
+  shipGun: t => {
+    tone(t, { type: 'sine', from: 170, to: 45, seconds: 0.35, gain: 0.4 });
+    noise(t, { filter: 'lowpass', hz: 1100, seconds: 0.4, gain: 0.3 });
+  },
+  shipSunk: t => {
+    tone(t, { type: 'sine', from: 140, to: 30, seconds: 1, gain: 0.35 });
+    noise(t, { filter: 'bandpass', hz: 420, at: 0.1, seconds: 1.1, gain: 0.25 });
+  },
 };
