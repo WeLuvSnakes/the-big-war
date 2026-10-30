@@ -1,192 +1,240 @@
-import { MAP_SHAPE } from './map.constants';
-import { isPassable } from './terrain.service';
+import { createShape } from './map-shape.service';
+import { isPassable, isWater } from './terrain.service';
 import type { GameConfig } from '../config/config.types';
 import { NEUTRAL_OWNER } from '../empire/empire.constants';
-import type { HexCell, HexGrid, Terrain } from './map.types';
 import type { Rng } from '@the-big-war/game-engine/rng/rng.types';
-import { nextFloat, nextInt } from '@the-big-war/game-engine/rng/rng.service';
+import { FOREST_SHARE, MAP_SHAPE, ORE_RICHNESS } from './map.constants';
+import type { Biome, HexCell, HexGrid, WorldLabels } from './map.types';
+import { flood, labelWorld, neighbourIndices } from './world-labels.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { area, distance, gridAt, gridInBounds, makeGrid, neighbors, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { createNoise, sampleFbm } from '@the-big-war/game-engine/noise/noise.service';
+import { nextFloat, nextInt, nextUint } from '@the-big-war/game-engine/rng/rng.service';
+import { distance, gridAt, makeGrid, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
-function paintBlob(grid: HexGrid, rng: Rng, center: Axial, radius: number, terrain: Terrain): void {
-  for (const hex of area(center, radius)) {
-    if (!gridInBounds(grid, hex.q, hex.r)) continue;
-
-    if (distance(center, hex) === radius && nextFloat(rng) < 0.5) continue;
-    const cell = gridAt(grid, hex);
-    if (!cell || cell.terrain === 'mountain') continue;
-
-    cell.terrain = terrain;
-  }
+export interface GeneratedWorld {
+  readonly grid: HexGrid;
+  readonly labels: WorldLabels;
 }
 
-function walkSpine(rng: Rng, start: Axial, length: number, bend: number): Axial[] {
-  let heading = nextFloat(rng) * Math.PI * 2;
-  let x = start.q;
-  let y = start.r;
-  const spine: Axial[] = [{ q: start.q, r: start.r }];
-  for (let step = 0; step < length; step++) {
-    heading += (nextFloat(rng) - 0.5) * bend;
-    x += Math.cos(heading);
-    y += Math.sin(heading);
-    const target = { q: Math.round(x), r: Math.round(y) };
-    let last = spine[spine.length - 1]!;
-    while (last.q !== target.q || last.r !== target.r) {
-      last = last.q !== target.q && (last.r === target.r || nextFloat(rng) < 0.5)
-        ? { q: last.q + Math.sign(target.q - last.q), r: last.r }
-        : { q: last.q, r: last.r + Math.sign(target.r - last.r) };
-      spine.push(last);
+const HISTOGRAM_BINS = 2048;
+
+function topShareThreshold(values: Float32Array, include: (at: number) => boolean, share: number): number {
+  let min = Infinity;
+  let max = -Infinity;
+  let total = 0;
+  for (let at = 0; at < values.length; at++) {
+    if (!include(at)) continue;
+    const value = values[at]!;
+    total += 1;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  if (total === 0 || max <= min) return min;
+  const bins = new Int32Array(HISTOGRAM_BINS);
+  const span = (HISTOGRAM_BINS - 1) / (max - min);
+  for (let at = 0; at < values.length; at++) {
+    if (include(at)) bins[Math.floor((values[at]! - min) * span)]! += 1;
+  }
+  const wanted = total * share;
+  let seen = 0;
+  for (let bin = HISTOGRAM_BINS - 1; bin > 0; bin--) {
+    seen += bins[bin]!;
+    if (seen >= wanted) return min + bin / span;
+  }
+  return min;
+}
+
+function elevationField(config: GameConfig, rng: Rng): Float32Array {
+  const { width, height, preset = 'continents' } = config.map;
+  const shape = createShape(preset, rng);
+  const warpU = createNoise(nextUint(rng));
+  const warpV = createNoise(nextUint(rng));
+  const terrain = createNoise(nextUint(rng));
+  const aspect = width / height;
+  const { warpFrequency: wf, warpAmount, elevationFrequency: ef, elevationNoise, edgeMargin } = MAP_SHAPE;
+  const elevation = new Float32Array(width * height);
+  for (let r = 0, at = 0; r < height; r++) {
+    const v = (r + 0.5) / height;
+    for (let q = 0; q < width; q++, at++) {
+      const u = (q + 0.5) / width;
+      const wu = u + (sampleFbm(warpU, u * wf * aspect, v * wf, 3) - 0.5) * warpAmount * 2;
+      const wv = v + (sampleFbm(warpV, u * wf * aspect, v * wf, 3) - 0.5) * warpAmount * 2;
+      const edge = Math.min(1, Math.min(u, 1 - u, v, 1 - v) / edgeMargin);
+      const relief = sampleFbm(terrain, u * ef * aspect, v * ef, 5);
+      elevation[at] = (shape.land(wu, wv) * (1 - elevationNoise) + relief * elevationNoise) * edge;
     }
   }
-  return spine;
+  const threshold = topShareThreshold(elevation, () => true, shape.share);
+  for (let at = 0; at < elevation.length; at++) elevation[at] = elevation[at]! - threshold;
+  return elevation;
 }
 
-function paintRange(grid: HexGrid, rng: Rng, start: Axial): void {
-  const length =
-    MAP_SHAPE.rangeMinLength + nextInt(rng, MAP_SHAPE.rangeMaxLength - MAP_SHAPE.rangeMinLength + 1);
-  const spine = walkSpine(rng, start, length, MAP_SHAPE.rangeBend);
-
-  spine.forEach((hex, index) => {
-    const along = index / Math.max(1, spine.length - 1);
-    const core = along > MAP_SHAPE.rangeTaper && along < 1 - MAP_SHAPE.rangeTaper;
-    paintMountain(grid, hex);
-    if (!core) return;
-    for (const side of neighbors(hex)) {
-      if (nextFloat(rng) < MAP_SHAPE.rangeWidenChance) paintMountain(grid, side);
-    }
-  });
-}
-
-function warpField(width: number, height: number, rng: Rng): (q: number, r: number) => Axial {
-  const cell = MAP_SHAPE.wallWarpCell;
-  const cols = Math.ceil(width / cell) + 2;
-  const rows = Math.ceil(height / cell) + 2;
-  const knots = Array.from({ length: cols * rows }, () => ({
-    q: (nextFloat(rng) * 2 - 1) * MAP_SHAPE.wallWarp,
-    r: (nextFloat(rng) * 2 - 1) * MAP_SHAPE.wallWarp,
-  }));
-  return (q, r) => {
-    const x = q / cell;
-    const y = r / cell;
-    const x0 = Math.floor(x);
-    const y0 = Math.floor(y);
-    const tx = x - x0;
-    const ty = y - y0;
-    const at = (i: number, j: number) => knots[j * cols + i]!;
-    const mix = (key: 'q' | 'r') =>
-      (at(x0, y0)[key] * (1 - tx) + at(x0 + 1, y0)[key] * tx) * (1 - ty) +
-      (at(x0, y0 + 1)[key] * (1 - tx) + at(x0 + 1, y0 + 1)[key] * tx) * ty;
-    return { q: q + mix('q'), r: r + mix('r') };
-  };
-}
-
-function scatterSites(width: number, height: number, rng: Rng): Axial[] {
-  const sites: Axial[] = [];
-  for (let attempt = 0; attempt < 400 && sites.length < MAP_SHAPE.wallRegions; attempt++) {
-    const site = { q: nextFloat(rng) * width, r: nextFloat(rng) * height };
-    if (sites.some(other => Math.hypot(other.q - site.q, other.r - site.r) < MAP_SHAPE.wallRegionSpacing)) continue;
-    sites.push(site);
+function removeSpecks(width: number, height: number, land: Uint8Array): void {
+  const islands = flood(width, height, at => land[at] === 1);
+  const main = islands.sizes.indexOf(Math.max(...islands.sizes, 0));
+  for (let at = 0; at < land.length; at++) {
+    const id = islands.labels[at]!;
+    if (id !== -1 && id !== main && islands.sizes[id]! < MAP_SHAPE.minIslandTiles) land[at] = 0;
   }
-  return sites;
+  const lakes = flood(width, height, at => land[at] === 0);
+  const sea = lakes.sizes.indexOf(Math.max(...lakes.sizes, 0));
+  for (let at = 0; at < land.length; at++) {
+    const id = lakes.labels[at]!;
+    if (id !== -1 && id !== sea && lakes.sizes[id]! < MAP_SHAPE.minLakeTiles) land[at] = 1;
+  }
 }
 
-function paintWalls(grid: HexGrid, rng: Rng): void {
-  const sites = scatterSites(grid.width, grid.height, rng);
-  if (sites.length < 2) return;
-  const warp = warpField(grid.width, grid.height, rng);
-  const kept = new Map<string, boolean>();
-  const walls = new Map<string, HexCell[]>();
+function coastDistance(width: number, height: number, land: Uint8Array): Int32Array {
+  const dist = new Int32Array(land.length).fill(-1);
+  const queue = new Int32Array(land.length);
+  const near = new Int32Array(4);
+  let tail = 0;
+  for (let at = 0; at < land.length; at++) {
+    if (land[at] === 1) continue;
+    dist[at] = 0;
+    queue[tail++] = at;
+  }
+  for (let head = 0; head < tail; head++) {
+    const at = queue[head]!;
+    const count = neighbourIndices(at, width, height, near);
+    for (let i = 0; i < count; i++) {
+      const next = near[i]!;
+      if (dist[next] !== -1) continue;
+      dist[next] = dist[at]! + 1;
+      queue[tail++] = next;
+    }
+  }
+  return dist;
+}
 
-  for (const cell of grid.cells) {
-    const p = warp(cell.q, cell.r);
-    let first = -1;
-    let second = -1;
-    let d1 = Infinity;
-    let d2 = Infinity;
-    sites.forEach((site, index) => {
-      const d = Math.hypot(site.q - p.q, site.r - p.r);
-      if (d < d1) {
-        second = first;
-        d2 = d1;
-        first = index;
-        d1 = d;
-      } else if (d < d2) {
-        second = index;
-        d2 = d;
+function carveRivers(
+  width: number,
+  height: number,
+  land: Uint8Array,
+  elevation: Float32Array,
+  dist: Int32Array,
+  rng: Rng,
+): Uint8Array {
+  const fords = new Uint8Array(land.length);
+  let peak = 0;
+  for (let at = 0; at < land.length; at++) if (land[at] === 1 && elevation[at]! > peak) peak = elevation[at]!;
+  const count = Math.round(((width * height) / 1000) * MAP_SHAPE.riversPerKiloTile);
+  const paths: number[][] = [];
+  const near = new Int32Array(4);
+  for (let attempt = 0; attempt < count * 30 && paths.length < count; attempt++) {
+    let at = nextInt(rng, land.length);
+    if (land[at] !== 1 || dist[at]! < MAP_SHAPE.riverMinLength) continue;
+    if (elevation[at]! < peak * MAP_SHAPE.riverSourceHeight) continue;
+    const path: number[] = [];
+    while (land[at] === 1) {
+      path.push(at);
+      const options = neighbourIndices(at, width, height, near);
+      let best = -1;
+      let bestScore = Infinity;
+      for (let i = 0; i < options; i++) {
+        const next = near[i]!;
+        if (dist[next]! >= dist[at]!) continue;
+        const score = nextFloat(rng);
+        if (score < bestScore) {
+          bestScore = score;
+          best = next;
+        }
       }
-    });
-    if (d2 - d1 >= MAP_SHAPE.wallThickness) continue;
-    const pair = `${Math.min(first, second)}:${Math.max(first, second)}`;
-    if (!kept.has(pair)) kept.set(pair, nextFloat(rng) < MAP_SHAPE.wallKeepChance);
-    if (!kept.get(pair)) continue;
-    const wall = walls.get(pair) ?? [];
-    wall.push(cell);
-    walls.set(pair, wall);
+      if (best === -1) break;
+      at = best;
+    }
+    for (const cell of path) land[cell] = 0;
+    paths.push(path);
   }
 
-  for (const [pair, wall] of walls) {
-    const [a, b] = pair.split(':').map(Number) as [number, number];
-    for (const cell of wall) cell.terrain = 'mountain';
-    cutPasses(grid, rng, wall, sites[a]!, sites[b]!);
-  }
-}
-
-function cutPasses(grid: HexGrid, rng: Rng, wall: readonly HexCell[], a: Axial, b: Axial): void {
-  const along = { q: -(b.r - a.r), r: b.q - a.q };
-  const ordered = [...wall].sort((x, y) => x.q * along.q + x.r * along.r - (y.q * along.q + y.r * along.r));
-  const count = Math.max(1, Math.round(ordered.length / MAP_SHAPE.passSpacing / MAP_SHAPE.wallThickness));
-  for (let i = 0; i < count; i++) {
-    const slot = (i + 0.25 + nextFloat(rng) * 0.5) / count;
-    const centre = ordered[Math.min(ordered.length - 1, Math.floor(slot * ordered.length))]!;
-    for (const hex of area(centre, MAP_SHAPE.passRadius + 1)) {
-      const cell = gridAt(grid, hex);
-      const dq = Math.abs(hex.q - centre.q);
-      const dr = Math.abs(hex.r - centre.r);
-      if (cell?.terrain === 'mountain' && Math.max(dq, dr) <= MAP_SHAPE.passRadius) cell.terrain = 'plain';
+  for (const path of paths) {
+    const start = Math.min(path.length >> 1, nextInt(rng, MAP_SHAPE.fordSpacing));
+    for (let i = start; i < path.length - 1; i += MAP_SHAPE.fordSpacing) {
+      const at = path[i]!;
+      const options = neighbourIndices(at, width, height, near);
+      let banks = 0;
+      for (let side = 0; side < options; side++) banks += land[near[side]!]!;
+      if (banks < 2) continue;
+      fords[at] = 1;
+      land[at] = 1;
     }
   }
+  return fords;
 }
 
-function paintMountain(grid: HexGrid, hex: Axial): void {
-  const cell = gridAt(grid, hex);
-  if (cell) cell.terrain = 'mountain';
+function classify(temperature: number, moisture: number, lowland: boolean): Biome {
+  if (temperature < 0.24) return moisture > 0.55 ? 'taiga' : 'tundra';
+  if (temperature < 0.42) return moisture > 0.42 ? 'taiga' : 'steppe';
+  if (temperature < 0.72) {
+    if (moisture < 0.34) return 'steppe';
+    return moisture > 0.68 && lowland ? 'swamp' : 'temperate';
+  }
+  if (moisture < 0.42) return 'desert';
+  if (moisture > 0.72 && lowland) return 'swamp';
+  return moisture > 0.58 ? 'jungle' : 'steppe';
 }
 
-export function generateTerrain(config: GameConfig, rng: Rng): HexGrid {
-  const { width, height } = config.map;
-  const grid = makeGrid<HexCell>(width, height, hex => ({
-    q: hex.q,
-    r: hex.r,
-    terrain: 'plain',
-    owner: NEUTRAL_OWNER,
-    building: null,
-  }));
+function stretch(value: number): number {
+  return Math.max(0, Math.min(1, (value - 0.5) * 2.4 + 0.5));
+}
 
-  const randomCenter = (): Axial => ({
-    q: nextInt(rng, width),
-    r: nextInt(rng, height),
-  });
-
-  paintWalls(grid, rng);
-  const inset = MAP_SHAPE.rangeEdgeInset;
-  for (let i = 0; i < MAP_SHAPE.mountainRanges; i++) {
-    paintRange(grid, rng, { q: inset + nextInt(rng, width - inset * 2), r: inset + nextInt(rng, height - inset * 2) });
+function assignClimate(
+  width: number,
+  height: number,
+  land: Uint8Array,
+  elevation: Float32Array,
+  dist: Int32Array,
+  peak: number,
+  rng: Rng,
+): Biome[] {
+  const heat = createNoise(nextUint(rng));
+  const damp = createNoise(nextUint(rng));
+  const fire = createNoise(nextUint(rng));
+  const f = MAP_SHAPE.climateFrequency;
+  const aspect = width / height;
+  const biomes = new Array<Biome>(land.length);
+  for (let r = 0, at = 0; r < height; r++) {
+    const v = (r + 0.5) / height;
+    for (let q = 0; q < width; q++, at++) {
+      const u = (q + 0.5) / width;
+      const height01 = peak > 0 ? Math.max(0, elevation[at]!) / peak : 0;
+      const latitude = 1 - Math.abs(v - 0.5) * 2;
+      const temperature = latitude * 0.75 + stretch(sampleFbm(heat, u * f * aspect, v * f, 3)) * 0.35 - height01 * 0.2;
+      const near = Math.max(0, 1 - dist[at]! / 16);
+      const moisture = stretch(sampleFbm(damp, u * f * aspect, v * f, 4)) * 0.85 + near * 0.2;
+      const volcano = sampleFbm(fire, u * f * 3 * aspect, v * f * 3, 2);
+      biomes[at] = volcano > MAP_SHAPE.volcanicThreshold && height01 > 0.2 ? 'volcanic' : classify(temperature, moisture, height01 < 0.3);
+    }
   }
-  for (let i = 0; i < MAP_SHAPE.forestPatches; i++) {
-    const radius =
-      MAP_SHAPE.patchMinRadius + nextInt(rng, MAP_SHAPE.patchMaxRadius - MAP_SHAPE.patchMinRadius + 1);
-    paintBlob(grid, rng, randomCenter(), radius, 'forest');
-  }
+  return biomes;
+}
 
-  for (const cell of grid.cells) {
-    if (cell.terrain !== 'plain') continue;
-    if (nextFloat(rng) < MAP_SHAPE.forestVeinChance) cell.terrain = 'forest';
+function paintFeatures(grid: HexGrid, elevation: Float32Array, peak: number, fords: Uint8Array, rng: Rng): void {
+  const { cells, width } = grid;
+  const ridges = createNoise(nextUint(rng));
+  const woods = createNoise(nextUint(rng));
+  const scores = new Float32Array(cells.length);
+  const eligible = (at: number) => !isWater(cells[at]!.terrain) && fords[at] !== 1;
+  for (let at = 0; at < cells.length; at++) {
+    if (!eligible(at)) continue;
+    const q = at % width;
+    const r = (at - q) / width;
+    const raw = sampleFbm(ridges, q / MAP_SHAPE.ridgeWavelength, r / MAP_SHAPE.ridgeWavelength, 4);
+    const ridge = 1 - Math.abs(raw * 2 - 1);
+    const volcanic = cells[at]!.biome === 'volcanic' ? 0.2 : 0;
+    scores[at] = ridge * 0.7 + (peak > 0 ? Math.max(0, elevation[at]!) / peak : 0) * 0.3 + volcanic;
   }
-
-  pruneLoneMountains(grid);
-  connectRegions(grid);
-  placeOre(grid, rng);
-  return grid;
+  const line = topShareThreshold(scores, eligible, MAP_SHAPE.mountainShare);
+  for (let at = 0; at < cells.length; at++) {
+    if (!eligible(at)) continue;
+    const cell = cells[at]!;
+    if (scores[at]! >= line) {
+      cell.terrain = 'mountain';
+      continue;
+    }
+    const wood = stretch(sampleFbm(woods, cell.q / MAP_SHAPE.forestWavelength, cell.r / MAP_SHAPE.forestWavelength, 3));
+    if (wood < FOREST_SHARE[cell.biome]) cell.terrain = 'forest';
+  }
 }
 
 export function pruneLoneMountains(grid: HexGrid): void {
@@ -196,80 +244,42 @@ export function pruneLoneMountains(grid: HexGrid): void {
   }
 }
 
-interface Regions {
-  readonly labels: Int32Array;
-  readonly sizes: number[];
-}
-
-function labelRegions(grid: HexGrid): Regions {
-  const labels = new Int32Array(grid.cells.length).fill(-1);
-  const sizes: number[] = [];
-  grid.cells.forEach((cell, index) => {
-    if (labels[index] !== -1 || !isPassable(cell.terrain)) return;
-    const id = sizes.length;
-    let size = 0;
-    const stack: Axial[] = [cell];
-    labels[index] = id;
-    while (stack.length > 0) {
-      const hex = stack.pop()!;
-      size += 1;
-      for (const next of neighbors(hex)) {
-        const neighbour = gridAt(grid, next);
-        const nextIndex = gridIndex(grid, next.q, next.r);
-        if (!neighbour || labels[nextIndex] !== -1 || !isPassable(neighbour.terrain)) continue;
-        labels[nextIndex] = id;
-        stack.push(next);
-      }
-    }
-    sizes.push(size);
+function connectPasses(grid: HexGrid): void {
+  const { cells, width, height } = grid;
+  const open = (at: number) => !isWater(cells[at]!.terrain) && isPassable(cells[at]!.terrain);
+  const solid = (at: number) => !isWater(cells[at]!.terrain);
+  const masses = flood(width, height, solid);
+  const pockets = flood(width, height, open);
+  const biggest = new Map<number, number>();
+  pockets.labels.forEach((pocket, at) => {
+    if (pocket === -1) return;
+    const mass = masses.labels[at]!;
+    const current = biggest.get(mass);
+    if (current === undefined || pockets.sizes[pocket]! > pockets.sizes[current]!) biggest.set(mass, pocket);
   });
-  return { labels, sizes };
-}
 
-export function connectRegions(grid: HexGrid): void {
-  for (let guard = 0; guard < grid.cells.length; guard++) {
-    const { labels, sizes } = labelRegions(grid);
-    if (sizes.length <= 1) return;
-    const main = sizes.indexOf(Math.max(...sizes));
-
-    let filled = false;
-    grid.cells.forEach((cell, index) => {
-      const label = labels[index]!;
-      if (label === -1 || label === main || sizes[label]! >= MAP_SHAPE.pocketMinSize) return;
-      cell.terrain = 'mountain';
-      filled = true;
-    });
-    if (filled) continue;
-
-    carveToMain(grid, labels, main);
+  const parent = new Int32Array(cells.length).fill(-2);
+  const queue = new Int32Array(cells.length);
+  const near = new Int32Array(4);
+  let tail = 0;
+  for (let at = 0; at < cells.length; at++) {
+    const pocket = pockets.labels[at]!;
+    if (pocket === -1 || biggest.get(masses.labels[at]!) !== pocket) continue;
+    parent[at] = -1;
+    queue[tail++] = at;
   }
-}
-
-function carveToMain(grid: HexGrid, labels: Int32Array, main: number): void {
-  const previous = new Int32Array(grid.cells.length).fill(-2);
-  const queue: number[] = [];
-  labels.forEach((label, index) => {
-    if (label !== main) return;
-    previous[index] = -1;
-    queue.push(index);
-  });
-  for (let head = 0; head < queue.length; head++) {
-    const index = queue[head]!;
-    const label = labels[index]!;
-    if (label !== -1 && label !== main) {
-      for (let at = index; at !== -1; at = previous[at]!) {
-        const cell = grid.cells[at]!;
-        if (cell.terrain === 'mountain') cell.terrain = 'plain';
+  for (let head = 0; head < tail; head++) {
+    const at = queue[head]!;
+    const count = neighbourIndices(at, width, height, near);
+    for (let i = 0; i < count; i++) {
+      const next = near[i]!;
+      if (parent[next] !== -2 || !solid(next)) continue;
+      parent[next] = at;
+      queue[tail++] = next;
+      if (cells[next]!.terrain === 'mountain' || cells[at]!.terrain !== 'mountain') continue;
+      for (let back = at; back >= 0 && cells[back]!.terrain === 'mountain'; back = parent[back]!) {
+        cells[back]!.terrain = 'plain';
       }
-      return;
-    }
-    const cell = grid.cells[index]!;
-    for (const next of neighbors(cell)) {
-      if (!gridInBounds(grid, next.q, next.r)) continue;
-      const nextIndex = gridIndex(grid, next.q, next.r);
-      if (previous[nextIndex] !== -2) continue;
-      previous[nextIndex] = index;
-      queue.push(nextIndex);
     }
   }
 }
@@ -279,10 +289,11 @@ function placeOre(grid: HexGrid, rng: Rng): void {
     cell => cell.terrain === 'plain' && neighbors(cell).some(hex => gridAt(grid, hex)?.terrain === 'mountain'),
   );
   if (foothills.length === 0) return;
+  const wanted = Math.max(1, Math.round((grid.cells.length / 1000) * MAP_SHAPE.oreDepositsPerKiloTile));
   const deposits: Axial[] = [];
-  for (let attempt = 0; attempt < foothills.length && deposits.length < MAP_SHAPE.oreDeposits; attempt++) {
+  for (let attempt = 0; attempt < wanted * 12 && deposits.length < wanted; attempt++) {
     const seed = foothills[nextInt(rng, foothills.length)]!;
-    if (seed.terrain !== 'plain') continue;
+    if (seed.terrain !== 'plain' || nextFloat(rng) > ORE_RICHNESS[seed.biome]) continue;
     if (deposits.some(existing => distance(existing, seed) < MAP_SHAPE.oreSpacing)) continue;
     deposits.push(seed);
     const size = MAP_SHAPE.oreMinSize + nextInt(rng, MAP_SHAPE.oreMaxSize - MAP_SHAPE.oreMinSize + 1);
@@ -299,4 +310,35 @@ function placeOre(grid: HexGrid, rng: Rng): void {
       vein.push(next);
     }
   }
+}
+
+export function generateWorld(config: GameConfig, rng: Rng): GeneratedWorld {
+  const { width, height } = config.map;
+  const elevation = elevationField(config, rng);
+  const land = new Uint8Array(elevation.length);
+  let peak = 0;
+  for (let at = 0; at < land.length; at++) {
+    land[at] = elevation[at]! >= 0 ? 1 : 0;
+    if (elevation[at]! > peak) peak = elevation[at]!;
+  }
+  removeSpecks(width, height, land);
+  const fords = carveRivers(width, height, land, elevation, coastDistance(width, height, land), rng);
+  const biomes = assignClimate(width, height, land, elevation, coastDistance(width, height, land), peak, rng);
+  const grid = makeGrid<HexCell>(width, height, hex => {
+    const at = hex.r * width + hex.q;
+    return {
+      q: hex.q,
+      r: hex.r,
+      terrain: land[at] === 1 ? 'plain' : 'water',
+      biome: biomes[at]!,
+      owner: NEUTRAL_OWNER,
+      building: null,
+    };
+  });
+
+  paintFeatures(grid, elevation, peak, fords, rng);
+  pruneLoneMountains(grid);
+  connectPasses(grid);
+  placeOre(grid, rng);
+  return { grid, labels: labelWorld(grid, fords) };
 }

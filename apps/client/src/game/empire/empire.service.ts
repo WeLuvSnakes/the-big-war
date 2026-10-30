@@ -1,8 +1,9 @@
 import type { GameState } from '../state/state.types';
 import type { Empire, EmpireSeed } from './empire.types';
 import type { GameConfig } from '../config/config.types';
+import { ownedTileCount } from '../map/world-index.service';
 import { emptyModifierTotals } from '../modifier/modifier.service';
-import { CHEAT_UNLIMITED_AMOUNT, CHEAT_UNLIMITED_NAME, NEUTRAL_OWNER } from './empire.constants';
+import { CHEAT_UNLIMITED_AMOUNT, CHEAT_UNLIMITED_NAME } from './empire.constants';
 
 export function createEmpire(config: GameConfig, seed: EmpireSeed): Empire {
   const unlimited = seed.isHuman && isUnlimitedName(seed.name);
@@ -33,12 +34,7 @@ export function createEmpire(config: GameConfig, seed: EmpireSeed): Empire {
 }
 
 export function refreshHexCounts(state: GameState): void {
-  const counts = new Array<number>(state.empires.length).fill(0);
-  for (const cell of state.grid.cells) {
-    if (cell.owner === NEUTRAL_OWNER) continue;
-    if (cell.owner >= 0 && cell.owner < counts.length) counts[cell.owner]! += 1;
-  }
-  for (const empire of state.empires) empire.hexCount = counts[empire.id] ?? 0;
+  for (const empire of state.empires) empire.hexCount = ownedTileCount(state, empire.id);
 }
 
 export function hasUnlimitedResources(empire: Empire): boolean {

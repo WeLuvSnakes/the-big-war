@@ -2,6 +2,7 @@ import type { HexCell } from '../map/map.types';
 import type { GameState } from '../state/state.types';
 import type { EmpireId } from '../empire/empire.types';
 import type { Building } from '../building/building.types';
+import { buildingCellsOf } from '../map/world-index.service';
 import { gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 
@@ -23,25 +24,16 @@ export function addToGarrison(state: GameState, building: Building, troops: numb
   return troops - moved;
 }
 
-export function defendersOn(state: GameState, cell: HexCell): number {
-  let total = 0;
-  for (const front of state.fronts) {
-    if (front.hexA.q === cell.q && front.hexA.r === cell.r && front.sideA.empire === cell.owner) total += front.sideA.troops;
-    if (front.hexB.q === cell.q && front.hexB.r === cell.r && front.sideB.empire === cell.owner) total += front.sideB.troops;
-  }
-  return total;
-}
-
-export function isMannedMachineGun(state: GameState, cell: HexCell): boolean {
+export function isMannedMachineGun(cell: HexCell): boolean {
   const building = cell.building;
   if (!building || building.kind !== 'trench' || !building.machineGun || building.buildRemaining > 0) return false;
-  return building.garrison > 0 || defendersOn(state, cell) > 0;
+  return building.garrison > 0;
 }
 
 export function garrisonedTroops(state: GameState, empire: EmpireId): number {
   let total = 0;
-  for (const cell of state.grid.cells) {
-    if (cell.owner === empire && cell.building?.kind === 'trench') total += cell.building.garrison;
+  for (const cell of buildingCellsOf(state, empire)) {
+    if (cell.building?.kind === 'trench') total += cell.building.garrison;
   }
   return total;
 }

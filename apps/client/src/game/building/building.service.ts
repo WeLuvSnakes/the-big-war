@@ -1,6 +1,9 @@
 import type { HexCell } from '../map/map.types';
 import { ownTrench } from '../trench/trench.service';
 import type { GameState } from '../state/state.types';
+import { portWaterBody } from '../map/port-site.service';
+import { buildingCellsOf } from '../map/world-index.service';
+import { isPassable, isWater } from '../map/terrain.service';
 import type { CommandError } from '../commands/commands.types';
 import type { Empire, EmpireId } from '../empire/empire.types';
 import type { BarracksTierConfig } from '../config/config.types';
@@ -8,8 +11,8 @@ import { ENGINE_TUNING } from '../simulation/simulation.constants';
 import { hasUnlock, isComplete } from '../research/research.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
-import { area, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import type { Building, BuildingId, BuildingKind, OwnedBuilding } from './building.types';
+import { area, gridAt, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { CLEARS_TERRAIN, FLAT_COST_BUILDINGS, PRODUCTION_BUILDINGS } from './building.constants';
 
 export function createBuilding(state: GameState, kind: BuildingKind, level: number, buildRemaining: number): Building {
@@ -24,6 +27,8 @@ export function createBuilding(state: GameState, kind: BuildingKind, level: numb
     gatherers: [],
     garrison: 0,
     machineGun: false,
+    shipBuild: 0,
+    shellDamage: 0,
   };
 }
 
@@ -33,8 +38,10 @@ export function isProductionBuilding(kind: BuildingKind): boolean {
 
 export function buildingCost(state: GameState, empireId: EmpireId, kind: BuildingKind): number {
   const empire = state.empires[empireId];
+  const { buildingCostStep, tilesPerFreeBuilding } = state.config.economy;
   const placed = FLAT_COST_BUILDINGS.has(kind) ? 0 : countPlacedOfKind(state, empireId, kind);
-  const base = state.config.buildings[kind].cost * state.config.economy.buildingCostGrowth ** placed;
+  const excess = Math.max(0, placed - Math.floor((empire?.hexCount ?? 0) / tilesPerFreeBuilding));
+  const base = state.config.buildings[kind].cost * (1 + buildingCostStep * excess);
   return empire ? resolveModifier(base, empire.bonuses.buildCost) : base;
 }
 
@@ -44,8 +51,8 @@ export function buildingIdAt(state: GameState, hex: Axial): BuildingId | null {
 
 export function ownedBuildings(state: GameState, empireId: EmpireId): OwnedBuilding[] {
   const out: OwnedBuilding[] = [];
-  for (const cell of state.grid.cells) {
-    if (cell.owner !== empireId || !cell.building || cell.building.buildRemaining > 0) continue;
+  for (const cell of buildingCellsOf(state, empireId)) {
+    if (!cell.building || cell.building.buildRemaining > 0) continue;
     out.push({ hex: { q: cell.q, r: cell.r }, cell, building: cell.building });
   }
   return out;
@@ -53,8 +60,8 @@ export function ownedBuildings(state: GameState, empireId: EmpireId): OwnedBuild
 
 export function countBuildingsOfKind(state: GameState, empireId: EmpireId, kind: BuildingKind): number {
   let count = 0;
-  for (const cell of state.grid.cells) {
-    if (cell.owner !== empireId || !cell.building || cell.building.buildRemaining > 0) continue;
+  for (const cell of buildingCellsOf(state, empireId)) {
+    if (!cell.building || cell.building.buildRemaining > 0) continue;
     if (kind === 'machine_gun' ? cell.building.machineGun : cell.building.kind === kind) count += 1;
   }
   return count;
@@ -62,8 +69,8 @@ export function countBuildingsOfKind(state: GameState, empireId: EmpireId, kind:
 
 function countPlacedOfKind(state: GameState, empireId: EmpireId, kind: BuildingKind): number {
   let count = 0;
-  for (const cell of state.grid.cells) {
-    if (cell.owner !== empireId || !cell.building) continue;
+  for (const cell of buildingCellsOf(state, empireId)) {
+    if (!cell.building) continue;
     if (kind === 'machine_gun' ? cell.building.machineGun : cell.building.kind === kind) count += 1;
   }
   return count;
@@ -118,10 +125,21 @@ export function placementError(
 
   if (cell.owner !== empireId || cell.building !== null) return 'invalid_target';
 
-  if (cell.terrain !== 'plain' && CLEARS_TERRAIN[kind] !== cell.terrain) return 'invalid_target';
+  if (kind === 'port') {
+    if (!isPassable(cell.terrain) || portWaterBody(state.grid, state.map, cell) === -1) return 'invalid_target';
+  } else if (cell.terrain !== 'plain' && CLEARS_TERRAIN[kind] !== cell.terrain) return 'invalid_target';
+
+  if (kind === 'fishery' && !touchesWater(state, cell)) return 'invalid_target';
 
   if (spec.requiresResearch !== null && !hasUnlock(empire, `building:${kind}`)) return 'not_researched';
   return null;
+}
+
+function touchesWater(state: GameState, cell: HexCell): boolean {
+  return neighbors(cell).some(hex => {
+    const next = gridAt(state.grid, hex);
+    return !!next && isWater(next.terrain);
+  });
 }
 
 function machineGunMountError(state: GameState, empire: Empire, hex: Axial): CommandError | null {
@@ -141,6 +159,15 @@ export function nextBarracksTier(state: GameState, building: Building): Barracks
   return state.config.barracksTiers[building.level] ?? null;
 }
 
+export function portUpgradeCost(state: GameState, building: Building): number {
+  return state.config.ship.portUpgradeCost * building.level;
+}
+
+export function upgradeCost(state: GameState, building: Building): number {
+  if (building.kind === 'port') return portUpgradeCost(state, building);
+  return nextBarracksTier(state, building)?.upgradeCost ?? 0;
+}
+
 export function upgradeError(state: GameState, empireId: EmpireId, hex: Axial): CommandError | null {
   const empire = state.empires[empireId];
   if (!empire || !empire.alive) return 'no_empire';
@@ -148,6 +175,10 @@ export function upgradeError(state: GameState, empireId: EmpireId, hex: Axial): 
   const building = cell?.building;
   if (!cell || cell.owner !== empireId || !building || building.buildRemaining > 0) return 'invalid_target';
   if (building.demolishAt !== null) return 'invalid_target';
+  if (building.kind === 'port') {
+    if (building.level >= state.config.upgrades.maxLevel) return 'invalid_target';
+    return empire.gold < portUpgradeCost(state, building) ? 'insufficient_gold' : null;
+  }
   const next = nextBarracksTier(state, building);
   if (!next) return 'invalid_target';
   if (next.requiresResearch !== null && !isComplete(empire.research, next.requiresResearch)) return 'not_researched';

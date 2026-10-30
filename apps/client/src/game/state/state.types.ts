@@ -1,58 +1,35 @@
-import type { HexGrid } from '../map/map.types';
-import type { Front } from '../front/front.types';
+import type { Ship, ShipId } from '../ship/ship.types';
+import type { WorldIndex } from '../map/world-index.types';
 import type { BuildingId } from '../building/building.types';
+import type { HexGrid, WorldLabels } from '../map/map.types';
 import type { Empire, EmpireId } from '../empire/empire.types';
 import type { Rng } from '@the-big-war/game-engine/rng/rng.types';
 import type { GameConfig, GameSpeed } from '../config/config.types';
+import type { Offensive, OffensiveId } from '../offensive/offensive.types';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import type { SimulationState } from '@the-big-war/game-engine/simulation/simulation.types';
 import type { DiplomaticRelation, OfferCooldown, PendingOffer } from '../diplomacy/diplomacy.types';
 
-export type EndReason = 'elimination';
-
-export interface Squad {
-  pos: { q: number; r: number };
-  tile: Axial;
-  heading: Axial;
-  goal: Axial | null;
-  from: Axial | null;
-  claiming: boolean;
-  progress: number;
-  duration: number;
-  readonly troops: number;
-}
-
-export interface Column {
-  readonly empire: EmpireId;
-  readonly mission: 'claim' | 'attack';
-  readonly path: readonly Axial[];
-  step: number;
-  progress: number;
-  troops: number;
-}
-
-export interface Expedition {
-  readonly empire: EmpireId;
-  target: Axial;
-  troops: number;
-
-  readonly region: readonly number[];
-  readonly origin: Axial;
-  squads: Squad[];
-}
+export type EndReason = 'elimination' | 'domination';
 
 export interface GameState extends SimulationState {
   readonly config: GameConfig;
   playerEmpire: EmpireId;
   grid: HexGrid;
+  map: WorldLabels;
+  readonly index: WorldIndex;
 
   empires: Empire[];
-  fronts: Front[];
-
-  expeditions: Expedition[];
-  columns: Column[];
+  offensives: Offensive[];
+  nextOffensiveId: OffensiveId;
+  ships: Ship[];
+  nextShipId: ShipId;
+  shipHash: Map<number, Ship[]>;
+  tradeClock: number;
 
   landHexCount: number;
+
+  spawnSites: (Axial | null)[];
 
   speed: GameSpeed;
   rng: Rng;

@@ -1,6 +1,6 @@
 import { withLiveEmpire } from '../command-guards';
-import { joinFront } from '../../troops/troops.service';
 import { NEUTRAL_OWNER } from '../../empire/empire.constants';
+import { launchOffensive } from '../../offensive/offensive.service';
 import { garrisonRoom, ownTrench } from '../../trench/trench.service';
 import { canAttack, declareWar } from '../../diplomacy/diplomacy.service';
 import { percentShare } from '@the-big-war/game-engine/math/math.service';
@@ -43,7 +43,7 @@ export const handleTrenchAttack = withLiveEmpire<TrenchAttackCommand>((state, co
   if (!attackCheck.allowed) return fail(command.type, attackCheck.reason ?? 'invalid_target');
   declareWar(state, command.empire, to.owner);
 
-  if (!joinFront(state, command.empire, command.hex, command.target, troops, 'attack')) {
+  if (!launchOffensive(state, command.empire, to.owner, command.target, troops)) {
     return fail(command.type, 'invalid_target');
   }
   trench.garrison -= troops;

@@ -1,17 +1,16 @@
-import { stepCombat } from './systems/combat.system';
+import { stepShips } from './systems/ships.system';
 import type { GameState } from '../state/state.types';
-import { stepColumns } from './systems/columns.system';
 import { stepEconomy } from './systems/economy.system';
 import { stepResearch } from './systems/research.system';
 import { stepArtillery } from './systems/artillery.system';
 import { stepBuildings } from './systems/buildings.system';
-import { stepExpansion } from './systems/expansion.system';
 import { stepGathering } from './systems/gathering.system';
+import { stepOffensives } from './systems/offensives.system';
 import { checkWinConditions } from './systems/victory.system';
 import { stepRecruitment } from './systems/recruitment.system';
 import { stepHousekeeping } from './systems/housekeeping.system';
-import type { System } from '@the-big-war/game-engine/simulation/simulation.types';
 import { createStepper } from '@the-big-war/game-engine/simulation/simulation.service';
+import type { Stepper, System } from '@the-big-war/game-engine/simulation/simulation.types';
 
 export const GAME_SYSTEMS: readonly System<GameState>[] = [
   stepEconomy,
@@ -20,11 +19,14 @@ export const GAME_SYSTEMS: readonly System<GameState>[] = [
   stepRecruitment,
   stepBuildings,
   stepArtillery,
-  stepColumns,
-  stepExpansion,
-  stepCombat,
+  stepShips,
+  stepOffensives,
   stepHousekeeping,
   checkWinConditions,
 ];
 
-export const step = createStepper(GAME_SYSTEMS);
+const advance = createStepper(GAME_SYSTEMS);
+
+export const step: Stepper<GameState> = (state, dt) => {
+  if (state.spawnSites.length === 0) advance(state, dt);
+};

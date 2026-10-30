@@ -3,12 +3,13 @@ import type { GameState } from '../../state/state.types';
 import type { EmpireId } from '../../empire/empire.types';
 import { returnToReserve } from '../../troops/troops.service';
 import type { Building } from '../../building/building.types';
+import { allBuildingCells, buildingCellsOf, setBuilding } from '../../map/world-index.service';
 
 export function stepBuildings(state: GameState, dt: number): void {
   for (const building of activeConstruction(state)) {
     building.buildRemaining = Math.max(0, building.buildRemaining - dt);
   }
-  for (const cell of state.grid.cells) {
+  for (const cell of allBuildingCells(state)) {
     const building = cell.building;
     if (!building || building.buildRemaining > 0) continue;
     if ((building.kind === 'cannon' || building.kind === 'battery') && building.cooldown > 0) {
@@ -18,26 +19,26 @@ export function stepBuildings(state: GameState, dt: number): void {
 }
 
 export function removeDemolishedBuildings(state: GameState): void {
-  for (const cell of state.grid.cells) {
+  for (const cell of allBuildingCells(state)) {
     const building = cell.building;
     if (!building || building.demolishAt === null) continue;
     if (building.demolishAt > state.elapsed) continue;
     if (building.garrison > 0) returnToReserve(state, cell.owner, building.garrison);
-    cell.building = null;
+    setBuilding(state, cell, null);
   }
 }
 
 export function constructionQueue(state: GameState, empire: EmpireId): Building[] {
   const queue: Building[] = [];
-  for (const cell of state.grid.cells) {
-    if (cell.owner === empire && cell.building && cell.building.buildRemaining > 0) queue.push(cell.building);
+  for (const cell of buildingCellsOf(state, empire)) {
+    if (cell.building && cell.building.buildRemaining > 0) queue.push(cell.building);
   }
   return queue.sort((a, b) => a.id - b.id);
 }
 
 function activeConstruction(state: GameState): Building[] {
   const byEmpire = new Map<EmpireId, Building[]>();
-  for (const cell of state.grid.cells) {
+  for (const cell of allBuildingCells(state)) {
     const building = cell.building;
     if (!building || building.buildRemaining <= 0) continue;
     const list = byEmpire.get(cell.owner) ?? [];

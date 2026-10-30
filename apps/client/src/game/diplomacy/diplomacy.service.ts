@@ -1,6 +1,8 @@
-import { disbandFront } from '../front/front.service';
+import { tileScale } from '../map/terrain.service';
+import { troopsAtSea } from '../ship/ship.service';
 import type { GameState } from '../state/state.types';
 import type { EmpireId } from '../empire/empire.types';
+import { endOffensivesBetween } from '../offensive/offensive.service';
 import type { AttackCheck, DiplomaticRelation, DiplomaticStatus, OfferCooldown, PendingOffer } from './diplomacy.types';
 
 const AT_PEACE: DiplomaticRelation = { status: 'peace', treatyUntil: null };
@@ -37,6 +39,10 @@ export function isProtected(state: GameState, a: EmpireId, b: EmpireId): boolean
   return a !== b && treatySecondsLeft(state, a, b) > 0;
 }
 
+export function isTotalWar(state: GameState): boolean {
+  return state.elapsed >= state.config.diplomacy.totalWarSecondsPerScale * tileScale(state);
+}
+
 export function canAttack(
   state: GameState,
   attacker: EmpireId,
@@ -57,20 +63,10 @@ export function declareWar(state: GameState, attacker: EmpireId, defender: Empir
   return true;
 }
 
-export function endFrontsBetween(state: GameState, a: EmpireId, b: EmpireId): void {
-  for (let index = state.fronts.length - 1; index >= 0; index--) {
-    const front = state.fronts[index]!;
-    const connectsAB =
-      (front.sideA.empire === a && front.sideB.empire === b) ||
-      (front.sideA.empire === b && front.sideB.empire === a);
-    if (connectsAB) disbandFront(state, front);
-  }
-}
-
 export function agreePeace(state: GameState, a: EmpireId, b: EmpireId): void {
   if (a === b) return;
   setRelation(state, a, b, 'peace', state.elapsed + state.config.diplomacy.treatySeconds);
-  endFrontsBetween(state, a, b);
+  endOffensivesBetween(state, a, b);
 }
 
 export function dissolveDiplomacy(state: GameState, empireId: EmpireId): void {
@@ -142,8 +138,9 @@ export function acceptsOffer(state: GameState, from: EmpireId, target: EmpireId)
   const receiver = state.empires[target];
   if (!offerer || !receiver) return false;
   if (receiver.neutralState) return true;
-  const offererStrength = offerer.soldiers + offerer.hexCount;
-  const receiverStrength = receiver.soldiers + receiver.hexCount;
+  const offererStrength = offerer.soldiers + offerer.hexCount + troopsAtSea(state, from);
+  const receiverStrength = receiver.soldiers + receiver.hexCount + troopsAtSea(state, target);
+  if (isTotalWar(state)) return receiverStrength <= offererStrength * state.config.diplomacy.totalWarPeaceRatio;
   const leniency = 1.5 - state.config.bot.aggression;
   return receiverStrength <= offererStrength * 1.5 * leniency;
 }

@@ -1,67 +1,74 @@
 import { withLiveEmpire } from '../command-guards';
-import { isPassable } from '../../map/terrain.service';
+import { isWater } from '../../map/terrain.service';
+import type { Empire } from '../../empire/empire.types';
 import type { GameState } from '../../state/state.types';
 import { NEUTRAL_OWNER } from '../../empire/empire.constants';
+import { launchTransport, planLanding } from '../../ship/ship.service';
 import { canAttack, declareWar } from '../../diplomacy/diplomacy.service';
 import { percentShare } from '@the-big-war/game-engine/math/math.service';
-import type { CommandResult, SendTroopsCommand } from '../commands.types';
 import { ok, fail } from '@the-big-war/game-engine/commands/command.service';
+import { bordersOwner, launchOffensive } from '../../offensive/offensive.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { distance, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import { joinFront, launchExpedition, marchPath, stagingHex } from '../../troops/troops.service';
+import { gridAt, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import type { CommandResult, RecallOffensiveCommand, SendTroopsCommand } from '../commands.types';
 
 export const handleSendTroops = withLiveEmpire<SendTroopsCommand>((state, command, empire) => {
-
   const troops = percentShare(empire.soldiers, command.percent);
   if (troops <= 0) return fail(command.type, 'insufficient_troops');
 
-  const from = gridAt(state.grid, command.hex);
   const to = gridAt(state.grid, command.target);
-  if (!from || !to) return fail(command.type, 'invalid_target');
-  if (from.owner !== command.empire || to.owner === command.empire) return fail(command.type, 'invalid_target');
-  if (distance(command.hex, command.target) !== 1) return marchColumn(state, command, troops);
-  if (command.intent === 'attack' && stagingHex(state, command.empire, command.target)) {
-    return marchColumn(state, command, troops, command.hex);
-  }
+  if (!to || to.owner === command.empire) return fail(command.type, 'invalid_target');
 
-  if (to.owner === NEUTRAL_OWNER) {
-    if (!isPassable(to.terrain)) return marchColumn(state, command, troops, command.hex);
-    if (command.intent !== 'attack') return fail(command.type, 'invalid_target');
-    empire.soldiers -= troops;
-    launchExpedition(state, command.empire, command.target, troops);
-    return ok(command.type);
-  }
-
-  if (command.intent === 'attack') {
-    const attackCheck = canAttack(state, command.empire, to.owner);
+  if (isWater(to.terrain)) return fail(command.type, 'invalid_target');
+  const target = landTarget(state, command.empire, to.owner, landmassAt(state, command.target));
+  if (target === null) return sendByTransport(state, command, empire, to.owner, troops);
+  if (target !== NEUTRAL_OWNER) {
+    const attackCheck = canAttack(state, command.empire, target);
     if (!attackCheck.allowed) return fail(command.type, attackCheck.reason ?? 'invalid_target');
-    declareWar(state, command.empire, to.owner);
+    declareWar(state, command.empire, target);
   }
 
-  empire.soldiers -= troops;
-  if (!joinFront(state, command.empire, command.hex, command.target, troops, command.intent)) {
-    empire.soldiers += troops;
+  if (!launchOffensive(state, command.empire, target, command.target, troops)) {
     return fail(command.type, 'invalid_target');
   }
+  empire.soldiers -= troops;
   return ok(command.type);
 });
 
-function marchColumn(
+function landmassAt(state: GameState, hex: Axial): number {
+  return state.map.landmass[gridIndex(state.grid, hex.q, hex.r)]!;
+}
+
+function landTarget(state: GameState, empire: number, owner: number, landmass: number): number | null {
+  if (bordersOwner(state, empire, owner, landmass)) return owner;
+  return bordersOwner(state, empire, NEUTRAL_OWNER, landmass) ? NEUTRAL_OWNER : null;
+}
+
+function sendByTransport(
   state: GameState,
   command: SendTroopsCommand,
+  empire: Empire,
+  owner: number,
   troops: number,
-  border: Axial | null = null,
 ): CommandResult {
-  if (command.intent !== 'attack') return fail(command.type, 'invalid_target');
-  const path = marchPath(state, command.empire, command.target, border);
-  if (!path) return fail(command.type, 'invalid_target');
-  const targetOwner = gridAt(state.grid, command.target)!.owner;
-  if (targetOwner !== NEUTRAL_OWNER) {
-    const attackCheck = canAttack(state, command.empire, targetOwner);
+  if (owner !== NEUTRAL_OWNER) {
+    const attackCheck = canAttack(state, command.empire, owner);
     if (!attackCheck.allowed) return fail(command.type, attackCheck.reason ?? 'invalid_target');
   }
-  state.empires[command.empire]!.soldiers -= troops;
-  const mission = targetOwner === NEUTRAL_OWNER ? 'claim' : 'attack';
-  state.columns.push({ empire: command.empire, mission, path, step: 0, progress: 0, troops });
+  const plan = planLanding(state, command.empire, command.target, owner);
+  if (typeof plan === 'string') return fail(command.type, plan);
+  if (owner !== NEUTRAL_OWNER) declareWar(state, command.empire, owner);
+  launchTransport(state, command.empire, plan, command.target, troops);
+  empire.soldiers -= troops;
   return ok(command.type);
 }
+
+export const handleRecallOffensive = withLiveEmpire<RecallOffensiveCommand>((state, command, empire) => {
+  const index = state.offensives.findIndex(item => item.id === command.offensive && item.empire === command.empire);
+  if (index < 0) return fail(command.type, 'invalid_target');
+  const offensive = state.offensives[index]!;
+  empire.soldiers += offensive.troops * (1 - state.config.wave.retreatPenalty);
+  offensive.troops = 0;
+  state.offensives.splice(index, 1);
+  return ok(command.type);
+});

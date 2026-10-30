@@ -2,6 +2,7 @@ import { civilianGrowthRateOf } from './economy.system';
 import type { Empire } from '../../empire/empire.types';
 import type { GameState } from '../../state/state.types';
 import { deployedTroops } from '../../troops/troops.service';
+import { allBuildingCells, populationWeight } from '../../map/world-index.service';
 import { barracksTier, countBuildingsOfKind } from '../../building/building.service';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
 
@@ -25,7 +26,7 @@ export function stepRecruitment(state: GameState, dt: number): void {
 
     const targetReserve = cap * recruit.targetReserveRatio;
     const fielded = empire.soldiers + deployedTroops(state, empire.id);
-    const draftTarget = Math.min(targetReserve, cap * recruit.draftUntilRatio);
+    const draftTarget = Math.min(targetReserve, draftCapOf(state, empire, cap));
     if (barracks > 0 && fielded < draftTarget) empire.drafting = true;
     if (barracks <= 0 || fielded >= draftTarget || empire.civilians < recruit.civiliansPerSoldier) empire.drafting = false;
 
@@ -60,12 +61,22 @@ export function stepRecruitment(state: GameState, dt: number): void {
   }
 }
 
+export function draftCapOf(state: GameState, empire: Empire, cap: number): number {
+  const { draftUntilRatio, troopsPerTile } = state.config.recruit;
+  const militia = Math.min(cap, populationWeight(state, empire.id) * troopsPerTile);
+  return militia + (cap - militia) * draftUntilRatio;
+}
+
 export function reserveCapOf(state: GameState, empire: Empire): number {
   const recruit = state.config.recruit;
   const barracks = countBuildingsOfKind(state, empire.id, 'barracks');
   const forts = countBuildingsOfKind(state, empire.id, 'fort');
   const cities = countBuildingsOfKind(state, empire.id, 'city');
-  const raw = cities * recruit.cityReserveCap + barracks * recruit.barracksReserveCap + forts * recruit.fortReserveCap;
+  const raw =
+    cities * recruit.cityReserveCap +
+    barracks * recruit.barracksReserveCap +
+    forts * recruit.fortReserveCap +
+    populationWeight(state, empire.id) * recruit.troopsPerTile;
   return Math.max(
     0,
     Math.floor(
@@ -82,7 +93,7 @@ interface BarracksOutput {
 
 function barracksOutput(state: GameState): BarracksOutput {
   const out: BarracksOutput = { count: [], speed: [], gold: [] };
-  for (const cell of state.grid.cells) {
+  for (const cell of allBuildingCells(state)) {
     const building = cell.building;
     if (cell.owner < 0 || building?.kind !== 'barracks' || building.buildRemaining > 0) continue;
     const tier = barracksTier(state, building);

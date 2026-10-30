@@ -1,7 +1,8 @@
 import { withLiveEmpire } from '../command-guards';
-import { incidentFronts } from '../../front/front.service';
+import { shellShips } from '../../ship/ship.service';
+import { markTile } from '../../map/world-index.service';
 import type { FireCannonCommand } from '../commands.types';
-import { shellingFactor } from '../../building/building.service';
+import { shellOffensives } from '../../offensive/offensive.service';
 import { ok, fail } from '@the-big-war/game-engine/commands/command.service';
 import { distance, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
@@ -19,14 +20,12 @@ export const handleFireCannon = withLiveEmpire<FireCannonCommand>((state, comman
   empire.gold -= cannon.cost;
   from.building.cooldown = cannon.cooldown;
 
-  for (const front of incidentFronts(state, command.target)) {
-    const lossesA = Math.min(front.sideA.troops, cannon.damage * shellingFactor(state, front.sideA.empire, front.hexA));
-    const lossesB = Math.min(front.sideB.troops, cannon.damage * shellingFactor(state, front.sideB.empire, front.hexB));
-    front.sideA.troops -= lossesA;
-    front.sideB.troops -= lossesB;
-    front.resolution = { at: state.elapsed, lossesA, lossesB, capturedBy: null };
-  }
+  shellOffensives(state, command.empire, command.target, cannon.blastRadius, cannon.damage);
+  shellShips(state, command.empire, command.target, cannon.blastRadius, cannon.damage);
 
-  if (cannon.destroysTerrain.includes(target.terrain)) target.terrain = 'plain';
+  if (cannon.destroysTerrain.includes(target.terrain)) {
+    target.terrain = 'plain';
+    markTile(state, target);
+  }
   return ok(command.type);
 });

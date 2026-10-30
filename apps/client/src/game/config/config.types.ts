@@ -1,5 +1,5 @@
-import type { Terrain } from '../map/map.types';
 import type { BuildingKind } from '../building/building.types';
+import type { Biome, MapPreset, Terrain } from '../map/map.types';
 
 export type GameSpeed = 1 | 2 | 4;
 export interface MapConfig {
@@ -9,6 +9,18 @@ export interface MapConfig {
   readonly hexSize: number;
 
   readonly seed: number;
+
+  readonly preset?: MapPreset;
+}
+
+export interface BiomeConfig {
+  readonly defence: number;
+  readonly speed: number;
+  readonly population: number;
+}
+
+export interface VictoryConfig {
+  readonly dominationShare: number;
 }
 
 export interface BuildingConfig {
@@ -27,6 +39,7 @@ export interface StartConfig {
 
   readonly empireCount: number;
   readonly neutralStates?: number;
+  readonly pickSpawns?: boolean;
 
   readonly humanName?: string;
 }
@@ -66,6 +79,8 @@ export interface CannonConfig {
 
   readonly damage: number;
 
+  readonly blastRadius: number;
+
   readonly destroysTerrain: readonly Terrain[];
 }
 
@@ -81,50 +96,44 @@ export interface BatteryConfig {
   readonly damage: number;
 }
 
-export interface FrontConfig {
-
-  readonly idleEndSeconds: number;
-
-  readonly idleTroops: 0;
-
+export interface WaveConfig {
   readonly retreatPenalty: number;
-}
 
-export interface MultiFrontConfig {
+  readonly baseTilesPerSecond: number;
+  readonly tilesPerRootTroop: number;
 
-  readonly perExtraFront: number;
-
-  readonly maxBonus: number;
+  readonly neutralTroopsPerTile: number;
+  readonly minTroopsPerTile: number;
+  readonly densityWeight: number;
+  readonly defenderLossShare: number;
+  readonly sprawlCost: number;
 }
 
 export interface CombatConfig {
-  readonly attackWeight: number;
-  readonly defenceWeight: number;
-
   readonly terrainDefence: Readonly<Record<Terrain, number>>;
-  readonly multiFront: MultiFrontConfig;
-
-  readonly counterattack: { readonly attackMultiplier: number; readonly defenceMultiplier: number };
-
-  readonly baseLossesPerSecond: number;
 }
 
 export interface EconomyConfig {
 
   readonly baseGrowthPerSecond: number;
 
+  readonly growthPerTile: number;
+
   readonly cityGrowthPerCity: number;
 
   readonly farmGrowthPerFarm: number;
   readonly farmGrowthMax: number;
   readonly marketGoldPerSecond: number;
+  readonly fisheryGoldPerSecond: number;
 
   readonly labSciencePerSecond: number;
   readonly labGoldPerSecond: number;
 
   readonly workersPerBuilding: number;
 
-  readonly buildingCostGrowth: number;
+  readonly buildingCostStep: number;
+  readonly tilesPerFreeBuilding: number;
+  readonly taxGoldPerTile: number;
 }
 
 export interface GatherConfig {
@@ -170,6 +179,8 @@ export interface RecruitConfig {
 
   readonly fortReserveCap: number;
 
+  readonly troopsPerTile: number;
+
   readonly targetReserveRatio: number;
 
   readonly draftSecondsPerSoldier: number;
@@ -190,6 +201,38 @@ export interface DiplomacyConfig {
   readonly rejectCooldownSeconds: number;
 
   readonly offerExpirySeconds: number;
+  readonly totalWarSecondsPerScale: number;
+  readonly totalWarPeaceRatio: number;
+}
+
+export interface ShipKindConfig {
+  readonly hp: number;
+  readonly speed: number;
+}
+
+export interface ShipConfig {
+  readonly transport: ShipKindConfig;
+  readonly battleship: ShipKindConfig;
+  readonly trade: ShipKindConfig;
+
+  readonly boatsPerPort: number;
+  readonly boatsPerUpgrade: number;
+  readonly portUpgradeCost: number;
+
+  readonly battleshipCost: number;
+  readonly battleshipSeconds: number;
+
+  readonly range: number;
+  readonly damage: number;
+  readonly cooldown: number;
+  readonly coastTroopDamage: number;
+  readonly coastBuildingHits: number;
+  readonly blockadeRadius: number;
+
+  readonly tradeIntervalSeconds: number;
+  readonly tradeShipsPerPort: number;
+  readonly tradeBaseGold: number;
+  readonly tradeGoldPerTile: number;
 }
 
 export interface GameConfig {
@@ -201,8 +244,11 @@ export interface GameConfig {
   readonly cannon: CannonConfig;
   readonly battery: BatteryConfig;
   readonly trench: TrenchConfig;
-  readonly front: FrontConfig;
+  readonly ship: ShipConfig;
+  readonly wave: WaveConfig;
   readonly combat: CombatConfig;
+  readonly biomes: Readonly<Record<Biome, BiomeConfig>>;
+  readonly victory: VictoryConfig;
   readonly economy: EconomyConfig;
   readonly support: SupportConfig;
   readonly gather: GatherConfig;

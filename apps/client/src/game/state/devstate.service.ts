@@ -11,17 +11,12 @@ import { DEFAULT_GAME_CONFIG } from '../config/config.constants';
 import type { HexCell, HexGrid, Terrain } from '../map/map.types';
 import type { Rng } from '@the-big-war/game-engine/rng/rng.types';
 import { clamp } from '@the-big-war/game-engine/math/math.service';
+import { setBuilding, setOwner } from '../map/world-index.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { createRng, nextFloat, nextInt } from '@the-big-war/game-engine/rng/rng.service';
 import { area, makeGrid, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 const DEV_FACTIONS = ['ironclad', 'league', 'verdant', 'academy'];
-
-const DEV_EDGE_DIRECTIONS: readonly Axial[] = [
-  { q: 1, r: 0 },
-  { q: 0, r: 1 },
-  { q: 1, r: -1 },
-];
 
 function devTerrain(rng: Rng): Terrain {
   const roll = nextFloat(rng);
@@ -67,7 +62,7 @@ function cellAt(grid: HexGrid, hex: Axial): HexCell | undefined {
 function seedCapitals(state: GameState, rng: Rng): void {
   const grid = state.grid;
   const build = (cell: HexCell, kind: BuildingKind, level = 1): void => {
-    cell.building = createBuilding(state, kind, level, 0);
+    setBuilding(state, cell, createBuilding(state, kind, level, 0));
   };
 
   for (const empire of state.empires) {
@@ -75,7 +70,7 @@ function seedCapitals(state: GameState, rng: Rng): void {
     for (const hex of area(capital, 2)) {
       const cell = cellAt(grid, hex);
       if (!cell) continue;
-      cell.owner = empire.id;
+      setOwner(state, cell, empire.id);
     }
     const capCell = cellAt(grid, capital);
     if (!capCell || capCell.owner !== empire.id) continue;
@@ -89,69 +84,19 @@ function seedCapitals(state: GameState, rng: Rng): void {
   }
 }
 
-function findHostileEdges(grid: HexGrid, limit: number): Array<{ a: Axial; b: Axial }> {
-  const edges: Array<{ a: Axial; b: Axial }> = [];
-  for (let r = 0; r < grid.height && edges.length < limit; r++) {
-    for (let q = 0; q < grid.width && edges.length < limit; q++) {
-      const cell = grid.cells[r * grid.width + q]!;
-      if (cell.owner === NEUTRAL_OWNER) continue;
-      for (const dir of DEV_EDGE_DIRECTIONS) {
-        const nq = q + dir.q;
-        const nr = r + dir.r;
-        if (nq < 0 || nr < 0 || nq >= grid.width || nr >= grid.height) continue;
-        const other = grid.cells[nr * grid.width + nq]!;
-        if (other.owner !== NEUTRAL_OWNER && other.owner !== cell.owner) {
-          edges.push({ a: { q, r }, b: { q: nq, r: nr } });
-          break;
-        }
-      }
-    }
-  }
-  return edges;
-}
-
-function seedFronts(state: GameState, rng: Rng): void {
-  const grid = state.grid;
-  for (const edge of findHostileEdges(grid, 2)) {
-    const cellA = cellAt(grid, edge.a)!;
-    const cellB = cellAt(grid, edge.b)!;
-    state.fronts.push({
-      id: `${edge.a.q},${edge.a.r}|${edge.b.q},${edge.b.r}`,
-      hexA: edge.a,
-      hexB: edge.b,
-      sideA: {
-        empire: cellA.owner,
-        troops: 40 + nextInt(rng, 40),
-        mode: 'attack',
-        modifiers: { attack: 1, defence: 1, lines: [] },
-      },
-      sideB: {
-        empire: cellB.owner,
-        troops: 30 + nextInt(rng, 40),
-        mode: 'defence',
-        modifiers: { attack: 1, defence: 1.15, lines: [{ label: 'Forest', attack: 1, defence: 1.15 }] },
-      },
-      cluster: 0,
-      resolution: null,
-      capture: null,
-      lastAttackAt: 0,
-    });
-  }
-}
-
 export function createDevState(config: GameConfig = DEFAULT_GAME_CONFIG): GameState {
   const rng = createRng(config.map.seed);
   const grid = makeGrid<HexCell>(config.map.width, config.map.height, hex => ({
     q: hex.q,
     r: hex.r,
     terrain: devTerrain(rng),
+    biome: 'temperate',
     owner: NEUTRAL_OWNER,
     building: null,
   }));
 
   const state = createBaseState(config, grid, devEmpires(config));
   seedCapitals(state, rng);
-  seedFronts(state, rng);
 
   for (const empire of state.empires) {
     empire.hexCount = grid.cells.filter(cell => cell.owner === empire.id).length;

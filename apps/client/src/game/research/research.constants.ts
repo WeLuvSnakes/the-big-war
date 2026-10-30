@@ -94,7 +94,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
   {
     id: 'fortification',
     name: 'Fortification',
-    description: 'Field works: +15% defence on fronts.',
+    description: 'Field works: +15% defence against attack waves.',
     kind: 'modifier',
     branch: 'military',
     cost: 40,
@@ -174,7 +174,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
   {
     id: 'heavy_artillery',
     name: 'Heavy Artillery',
-    description: 'Unlocks artillery batteries that shell enemy lines on their own.',
+    description: 'Unlocks artillery batteries that shell enemy waves on their own.',
     kind: 'unlock',
     branch: 'military',
     cost: 100,
@@ -194,6 +194,18 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     requires: ['fortification'],
     position: { col: 1, row: 2 },
     effects: [{ kind: 'unlock', key: 'building:bunker', label: 'Bunker' }],
+  },
+  {
+    id: 'dreadnoughts',
+    name: 'Dreadnoughts',
+    description: 'Lets ports build battleships.',
+    kind: 'unlock',
+    branch: 'military',
+    cost: 100,
+    duration: 40,
+    requires: ['drill'],
+    position: { col: 2, row: 2 },
+    effects: [{ kind: 'unlock', key: 'ship:battleship', label: 'Battleship' }],
   },
   {
     id: 'armour',

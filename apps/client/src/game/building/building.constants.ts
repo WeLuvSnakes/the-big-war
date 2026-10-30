@@ -9,6 +9,8 @@ export const BUILDING_KINDS: readonly BuildingKind[] = [
   'miner',
   'lab',
   'barracks',
+  'port',
+  'fishery',
   'fort',
   'cannon',
   'trench',
@@ -24,6 +26,7 @@ export const PRODUCTION_BUILDINGS: ReadonlySet<BuildingKind> = new Set<BuildingK
   'miner',
   'lab',
   'farm',
+  'fishery',
 ]);
 
 export const FLAT_COST_BUILDINGS: ReadonlySet<BuildingKind> = new Set<BuildingKind>(['trench']);

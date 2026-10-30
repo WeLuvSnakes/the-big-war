@@ -10,6 +10,8 @@ export type BuildingKind =
   | 'miner'
   | 'farm'
   | 'lab'
+  | 'port'
+  | 'fishery'
   | 'barracks'
   | 'fort'
   | 'cannon'
@@ -49,6 +51,10 @@ export interface Building {
   garrison: number;
 
   machineGun: boolean;
+
+  shipBuild: number;
+
+  shellDamage: number;
 }
 
 export interface OwnedBuilding {

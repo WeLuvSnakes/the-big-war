@@ -1,6 +1,7 @@
 import type { GameState } from '../../state/state.types';
 import type { EmpireId } from '../../empire/empire.types';
 import { refillUnlimited } from '../../empire/empire.service';
+import { populationWeight } from '../../map/world-index.service';
 import type { OwnedBuilding } from '../../building/building.types';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
 import { isProductionBuilding, ownedBuildings } from '../../building/building.service';
@@ -37,6 +38,9 @@ export function stepEconomy(state: GameState, dt: number): void {
         case 'market':
           rawGold += econ.marketGoldPerSecond;
           break;
+        case 'fishery':
+          rawGold += econ.fisheryGoldPerSecond;
+          break;
         case 'lab':
           rawScience += econ.labSciencePerSecond * labLevelBonus(building.level);
           break;
@@ -45,7 +49,8 @@ export function stepEconomy(state: GameState, dt: number): void {
       }
     }
 
-    const goldIncome = resolveModifier(rawGold, empire.bonuses.goldIncome) * staffing;
+    const tax = populationWeight(state, empire.id) * econ.taxGoldPerTile;
+    const goldIncome = resolveModifier(rawGold, empire.bonuses.goldIncome) * staffing + tax;
     empire.gold += goldIncome * dt;
     if (empire.gold < 0) empire.gold = 0;
 
@@ -62,7 +67,7 @@ export function stepEconomy(state: GameState, dt: number): void {
     empire.scienceBalance = scienceProduction;
     refillUnlimited(empire);
 
-    const passive = econ.baseGrowthPerSecond;
+    const passive = econ.baseGrowthPerSecond + populationWeight(state, empire.id) * econ.growthPerTile;
     let farmGrowth = 0;
     let cityGrowth = 0;
     for (const { building } of owned) {

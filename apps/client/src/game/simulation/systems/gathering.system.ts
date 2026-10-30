@@ -1,3 +1,4 @@
+import { markTile } from '../../map/world-index.service';
 import type { GameState } from '../../state/state.types';
 import type { EmpireId } from '../../empire/empire.types';
 import type { HexCell, Terrain } from '../../map/map.types';
@@ -5,13 +6,14 @@ import { refillUnlimited } from '../../empire/empire.service';
 import type { Gatherer } from '../../building/building.types';
 import { lerp } from '@the-big-war/game-engine/math/math.service';
 import { GATHERED_TERRAIN } from '../../building/building.constants';
+import { allBuildingCells, ownedCells } from '../../map/world-index.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
 import { distance, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 export function stepGathering(state: GameState, dt: number): void {
   const gather = state.config.gather;
-  for (const cell of state.grid.cells) {
+  for (const cell of allBuildingCells(state)) {
     const building = cell.building;
     if (!building || building.buildRemaining > 0) continue;
     const terrain = GATHERED_TERRAIN[building.kind];
@@ -96,6 +98,7 @@ function startLeg(gatherer: Gatherer, phase: Gatherer['phase'], duration: number
 
 function harvest(state: GameState, cell: HexCell): void {
   cell.harvested = (cell.harvested ?? 0) + 1;
+  markTile(state, cell);
   const loads = cell.terrain === 'ore' ? state.config.gather.oreLoadsPerTile : state.config.gather.loadsPerTile;
   if (cell.harvested < loads) return;
   cell.terrain = 'plain';
@@ -105,8 +108,8 @@ function harvest(state: GameState, cell: HexCell): void {
 function nearestResource(state: GameState, home: Axial, owner: EmpireId, terrain: Terrain): Axial | null {
   let best: Axial | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
-  for (const cell of state.grid.cells) {
-    if (cell.terrain !== terrain || cell.owner !== owner || cell.building) continue;
+  for (const cell of ownedCells(state, owner)) {
+    if (cell.terrain !== terrain || cell.building) continue;
     const d = distance(home, cell);
     if (d < bestDistance) {
       best = { q: cell.q, r: cell.r };

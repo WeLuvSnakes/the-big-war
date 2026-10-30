@@ -1,7 +1,8 @@
+import type { ShipId } from '../ship/ship.types';
 import type { EmpireId } from '../empire/empire.types';
 import type { GameSpeed } from '../config/config.types';
 import type { BuildingKind } from '../building/building.types';
-import type { FrontId, FrontMode } from '../front/front.types';
+import type { OffensiveId } from '../offensive/offensive.types';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import type { CommandOutcome, CommandLogEntry as EngineCommandLogEntry } from '@the-big-war/game-engine/commands/command.types';
 
@@ -24,33 +25,26 @@ export type CommandError =
   | 'offer_rejected'
   | 'offer_cooldown'
   | 'offer_pending'
-  | 'offer_missing';
+  | 'offer_missing'
+  | 'no_port'
+  | 'port_busy'
+  | 'blockaded'
+  | 'no_sea_route'
+  | 'stale_match';
 
 export interface SendTroopsCommand {
   readonly type: 'SendTroops';
   readonly empire: EmpireId;
 
-  readonly hex: Axial;
-
   readonly target: Axial;
 
   readonly percent: number;
-
-  readonly intent: 'attack' | 'defence';
-
 }
 
-export interface SetFrontModeCommand {
-  readonly type: 'SetFrontMode';
+export interface RecallOffensiveCommand {
+  readonly type: 'RecallOffensive';
   readonly empire: EmpireId;
-  readonly frontId: FrontId;
-  readonly mode: FrontMode;
-}
-
-export interface RetreatFrontCommand {
-  readonly type: 'RetreatFront';
-  readonly empire: EmpireId;
-  readonly frontId: FrontId;
+  readonly offensive: OffensiveId;
 }
 
 export interface PlaceBuildingCommand {
@@ -94,6 +88,19 @@ export interface TrenchAttackCommand {
   readonly percent: number;
 }
 
+export interface BuildShipCommand {
+  readonly type: 'BuildShip';
+  readonly empire: EmpireId;
+  readonly hex: Axial;
+}
+
+export interface OrderShipCommand {
+  readonly type: 'OrderShip';
+  readonly empire: EmpireId;
+  readonly ship: ShipId;
+  readonly target: Axial;
+}
+
 export interface FireCannonCommand {
   readonly type: 'FireCannon';
   readonly empire: EmpireId;
@@ -119,6 +126,16 @@ export interface SelectFactionCommand {
   readonly type: 'SelectFaction';
   readonly empire: EmpireId;
   readonly factionId: string;
+}
+
+export interface ChooseSpawnCommand {
+  readonly type: 'ChooseSpawn';
+  readonly empire: EmpireId;
+  readonly target: Axial;
+}
+
+export interface ConfirmSpawnCommand {
+  readonly type: 'ConfirmSpawn';
 }
 
 export interface SetPausedCommand {
@@ -147,8 +164,7 @@ export interface RespondOfferCommand {
 
 export type Command =
   | SendTroopsCommand
-  | SetFrontModeCommand
-  | RetreatFrontCommand
+  | RecallOffensiveCommand
   | PlaceBuildingCommand
   | DemolishBuildingCommand
   | UpgradeBuildingCommand
@@ -156,9 +172,13 @@ export type Command =
   | LeaveTrenchCommand
   | TrenchAttackCommand
   | FireCannonCommand
+  | BuildShipCommand
+  | OrderShipCommand
   | StartResearchCommand
   | SetGameSpeedCommand
   | SelectFactionCommand
+  | ChooseSpawnCommand
+  | ConfirmSpawnCommand
   | SetPausedCommand
   | OfferPeaceCommand
   | DeclareWarCommand
