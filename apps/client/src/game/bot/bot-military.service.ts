@@ -5,6 +5,7 @@ import type { Empire } from '../empire/empire.types';
 import type { FrontMode } from '../front/front.types';
 import type { GameState } from '../state/state.types';
 import type { Command } from '../commands/commands.types';
+import { clamp } from '@the-big-war/game-engine/math/math.service';
 import { effectiveAggression, hostileEdges, troopsOnFrontsAgainst } from './bot-queries.service';
 
 export function troopCommand(bot: Bot, state: GameState, empire: Empire): Command | null {
@@ -17,7 +18,7 @@ export function troopCommand(bot: Bot, state: GameState, empire: Empire): Comman
   if (spendable < 1 || edges.length === 0) return null;
 
   const send = Math.floor(spendable * surplusShare);
-  const percent = Math.max(1, Math.min(100, Math.ceil((send / empire.soldiers) * 100)));
+  const percent = clamp(Math.ceil((send / empire.soldiers) * 100), 1, 100);
 
   let best = edges[0]!;
   let bestDefence = Infinity;

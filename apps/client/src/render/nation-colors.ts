@@ -1,5 +1,6 @@
 import type { GameState } from '../game/state/state.types';
 import { NEUTRAL_COLOR, SEA_COLOR, setNationColors } from './theme';
+import { clamp01 } from '@the-big-war/game-engine/math/math.service';
 
 type Lab = readonly [number, number, number];
 
@@ -57,7 +58,7 @@ function oklch(lightness: number, chroma: number, hue: number): number {
     c -= 0.005;
     rgb = oklchToLinear(lightness, c, hue);
   }
-  const [r, g, b] = rgb.map(v => linearToSrgb(Math.min(1, Math.max(0, v))));
+  const [r, g, b] = rgb.map(v => linearToSrgb(clamp01(v)));
   return (r! << 16) | (g! << 8) | b!;
 }
 

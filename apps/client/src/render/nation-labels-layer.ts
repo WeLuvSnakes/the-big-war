@@ -2,7 +2,7 @@ import { Container, Text } from 'pixi.js';
 import type { GameState } from '../game/state/state.types';
 import type { EmpireId } from '../game/empire/empire.types';
 import { NEUTRAL_OWNER } from '../game/empire/empire.constants';
-import { axialToPixel, gridCoord, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { axialToPixel, gridCoord, neighbors, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 const LABEL_ALPHA = 0.28;
 const MIN_HEXES = 6;
@@ -89,7 +89,7 @@ function largestClusters(state: GameState, hexSize: number): Map<EmpireId, Clust
       cluster.maxY = Math.max(cluster.maxY, p.y);
       for (const next of neighbors(hex)) {
         if (next.q < 0 || next.r < 0 || next.q >= grid.width || next.r >= grid.height) continue;
-        const nextIndex = next.r * grid.width + next.q;
+        const nextIndex = gridIndex(grid, next.q, next.r);
         if (seen[nextIndex] || grid.cells[nextIndex]!.owner !== owner) continue;
         seen[nextIndex] = 1;
         stack.push(nextIndex);

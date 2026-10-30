@@ -6,7 +6,7 @@ import { garrisonedTroops } from '../trench/trench.service';
 import type { BuildingKind } from '../building/building.types';
 import { isPassable, passableAt } from '../map/terrain.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { distance, gridAt, gridInBounds, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { distance, gridAt, gridInBounds, neighbors, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 export function launchExpedition(
   state: GameState,
@@ -15,7 +15,7 @@ export function launchExpedition(
   troops: number,
   origin: Axial | null = null,
 ): void {
-  const targetIndex = target.r * state.grid.width + target.q;
+  const targetIndex = gridIndex(state.grid, target.q, target.r);
   const existing = state.expeditions.find(
     expedition => expedition.empire === empire && expedition.region.includes(targetIndex),
   );
@@ -42,13 +42,13 @@ export function launchExpedition(
 
 export function wildRegion(state: GameState, start: Axial, empire: EmpireId): number[] {
   const { grid } = state;
-  const startIndex = start.r * grid.width + start.q;
+  const startIndex = gridIndex(grid, start.q, start.r);
   const seen = new Set<number>([startIndex]);
   const queue: Axial[] = [start];
   const region: number[] = [];
   while (queue.length > 0) {
     const hex = queue.pop()!;
-    const index = hex.r * grid.width + hex.q;
+    const index = gridIndex(grid, hex.q, hex.r);
     const cell = gridAt(grid, hex);
     if (!cell || !isPassable(cell.terrain)) continue;
     const wild = cell.owner === NEUTRAL_OWNER;
@@ -56,7 +56,7 @@ export function wildRegion(state: GameState, start: Axial, empire: EmpireId): nu
     if (wild) region.push(index);
     for (const next of neighbors(hex)) {
       if (!gridInBounds(grid, next.q, next.r)) continue;
-      const nextIndex = next.r * grid.width + next.q;
+      const nextIndex = gridIndex(grid, next.q, next.r);
       if (seen.has(nextIndex)) continue;
       seen.add(nextIndex);
       queue.push(next);
@@ -138,7 +138,7 @@ export function stagingHex(state: GameState, empire: EmpireId, target: Axial): A
 
 function ownedPath(state: GameState, empire: EmpireId, from: Axial, to: Axial): Axial[] | null {
   const { grid } = state;
-  const key = (hex: Axial) => hex.r * grid.width + hex.q;
+  const key = (hex: Axial) => gridIndex(grid, hex.q, hex.r);
   const goal = key(to);
   const previous = new Map<number, Axial | null>([[key(from), null]]);
   const queue: Axial[] = [from];
@@ -171,7 +171,7 @@ export function marchPath(state: GameState, empire: EmpireId, target: Axial, bor
 function passablePath(state: GameState, empire: EmpireId, target: Axial, border: Axial | null): Axial[] | null {
   const { grid } = state;
   if (!passableAt(state, target)) return null;
-  const key = (hex: Axial) => hex.r * grid.width + hex.q;
+  const key = (hex: Axial) => gridIndex(grid, hex.q, hex.r);
   const towardTarget = new Map<number, Axial | null>([[key(target), null]]);
   const queue: Axial[] = [target];
   for (let head = 0; head < queue.length; head++) {

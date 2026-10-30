@@ -7,6 +7,7 @@ import { NEUTRAL_OWNER } from '../empire/empire.constants';
 import type { BuildingKind } from '../building/building.types';
 import type { Bot, CannonShot, HostileEdge } from './bot.types';
 import { GATHERED_TERRAIN } from '../building/building.constants';
+import { clamp01 } from '@the-big-war/game-engine/math/math.service';
 import { canAttack, getRelation } from '../diplomacy/diplomacy.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { distance, gridAt, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
@@ -108,7 +109,7 @@ export function findCannonShot(state: GameState, empireId: EmpireId): CannonShot
 
 export function effectiveAggression(bot: Bot, state: GameState): number {
   const shifted = bot.personality.aggression + state.config.bot.aggression - 0.5;
-  return Math.min(1, Math.max(0, shifted));
+  return clamp01(shifted);
 }
 
 export function borderingEmpires(state: GameState, empireId: EmpireId): Set<EmpireId> {

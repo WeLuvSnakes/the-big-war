@@ -1,6 +1,7 @@
 import { createSignal } from 'solid-js';
 import { FACTIONS } from '../game/faction/faction.constants';
 import type { GameConfig } from '../game/config/config.types';
+import { clamp } from '@the-big-war/game-engine/math/math.service';
 import { DEFAULT_GAME_CONFIG } from '../game/config/config.constants';
 import type {
   Difficulty,
@@ -80,7 +81,7 @@ export function configFromSettings(settings: MatchSettings, playerName = ''): Ga
 }
 
 export function clampEmpires(count: number): number {
-  return Math.min(MAX_EMPIRES, Math.max(MIN_EMPIRES, Math.round(count)));
+  return clamp(Math.round(count), MIN_EMPIRES, MAX_EMPIRES);
 }
 
 const PLAYER_COLOR_KEY = 'the-big-war:player-color';

@@ -1,10 +1,9 @@
 import './Bar.css';
 import { Show } from 'solid-js';
 import type { BarProps, BarVariant } from './Bar.types';
+import { clamp01 } from '@the-big-war/game-engine/math/math.service';
 
 export type { BarProps, BarVariant };
-
-const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
 
 export const Bar = (props: BarProps) => (
   <div class={`hud-bar hud-bar--${props.variant ?? 'neutral'}`}>

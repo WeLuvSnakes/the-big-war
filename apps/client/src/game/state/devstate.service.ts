@@ -10,9 +10,10 @@ import type { BuildingKind } from '../building/building.types';
 import { DEFAULT_GAME_CONFIG } from '../config/config.constants';
 import type { HexCell, HexGrid, Terrain } from '../map/map.types';
 import type { Rng } from '@the-big-war/game-engine/rng/rng.types';
+import { clamp } from '@the-big-war/game-engine/math/math.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { area, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { createRng, nextFloat, nextInt } from '@the-big-war/game-engine/rng/rng.service';
+import { area, makeGrid, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 const DEV_FACTIONS = ['ironclad', 'league', 'verdant', 'academy'];
 
@@ -54,13 +55,13 @@ function capitalFor(state: GameState, id: number): Axial {
   const q = Math.round(cx + radius * Math.cos(angle));
   const r = Math.round(cy + radius * Math.sin(angle));
   return {
-    q: Math.max(1, Math.min(state.grid.width - 2, q)),
-    r: Math.max(1, Math.min(state.grid.height - 2, r)),
+    q: clamp(q, 1, state.grid.width - 2),
+    r: clamp(r, 1, state.grid.height - 2),
   };
 }
 
 function cellAt(grid: HexGrid, hex: Axial): HexCell | undefined {
-  return grid.cells[hex.r * grid.width + hex.q];
+  return grid.cells[gridIndex(grid, hex.q, hex.r)];
 }
 
 function seedCapitals(state: GameState, rng: Rng): void {

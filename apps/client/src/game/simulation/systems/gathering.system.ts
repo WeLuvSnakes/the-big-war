@@ -3,6 +3,7 @@ import type { EmpireId } from '../../empire/empire.types';
 import type { HexCell, Terrain } from '../../map/map.types';
 import { refillUnlimited } from '../../empire/empire.service';
 import type { Gatherer } from '../../building/building.types';
+import { lerp } from '@the-big-war/game-engine/math/math.service';
 import { GATHERED_TERRAIN } from '../../building/building.constants';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
@@ -53,8 +54,8 @@ function stepGatherer(
   gatherer.progress += dt;
   const target = gatherer.target!;
   const t = gatherer.duration > 0 ? Math.min(1, gatherer.progress / gatherer.duration) : 1;
-  if (gatherer.phase === 'outbound') gatherer.pos = lerp(home, target, t);
-  else if (gatherer.phase === 'returning') gatherer.pos = lerp(target, home, t);
+  if (gatherer.phase === 'outbound') gatherer.pos = lerpHex(home, target, t);
+  else if (gatherer.phase === 'returning') gatherer.pos = lerpHex(target, home, t);
   if (gatherer.progress < gatherer.duration) return 0;
 
   switch (gatherer.phase) {
@@ -115,6 +116,6 @@ function nearestResource(state: GameState, home: Axial, owner: EmpireId, terrain
   return best;
 }
 
-function lerp(a: Axial, b: Axial, t: number): Axial {
-  return { q: a.q + (b.q - a.q) * t, r: a.r + (b.r - a.r) * t };
+function lerpHex(a: Axial, b: Axial, t: number): Axial {
+  return { q: lerp(a.q, b.q, t), r: lerp(a.r, b.r, t) };
 }

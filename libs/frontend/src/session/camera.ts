@@ -1,3 +1,4 @@
+import { clamp } from '@the-big-war/game-engine/math/math.service';
 
 
 import type { Camera, VisibleWorldRect } from './camera.types';
@@ -15,7 +16,7 @@ export function createCamera(x = 0, y = 0, scale = DEFAULT_SCALE): Camera {
 }
 
 export function clampScale(scale: number): number {
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+  return clamp(scale, MIN_SCALE, MAX_SCALE);
 }
 
 export function screenToWorld(camera: Camera, screen: Pixel, viewport: Pixel): Pixel {

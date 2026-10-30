@@ -6,7 +6,7 @@ import type { HexCell, HexGrid, Terrain } from './map.types';
 import type { Rng } from '@the-big-war/game-engine/rng/rng.types';
 import { nextFloat, nextInt } from '@the-big-war/game-engine/rng/rng.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { area, distance, gridAt, gridInBounds, makeGrid, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { area, distance, gridAt, gridInBounds, makeGrid, neighbors, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 function paintBlob(grid: HexGrid, rng: Rng, center: Axial, radius: number, terrain: Terrain): void {
   for (const hex of area(center, radius)) {
@@ -215,7 +215,7 @@ function labelRegions(grid: HexGrid): Regions {
       size += 1;
       for (const next of neighbors(hex)) {
         const neighbour = gridAt(grid, next);
-        const nextIndex = next.r * grid.width + next.q;
+        const nextIndex = gridIndex(grid, next.q, next.r);
         if (!neighbour || labels[nextIndex] !== -1 || !isPassable(neighbour.terrain)) continue;
         labels[nextIndex] = id;
         stack.push(next);
@@ -266,7 +266,7 @@ function carveToMain(grid: HexGrid, labels: Int32Array, main: number): void {
     const cell = grid.cells[index]!;
     for (const next of neighbors(cell)) {
       if (!gridInBounds(grid, next.q, next.r)) continue;
-      const nextIndex = next.r * grid.width + next.q;
+      const nextIndex = gridIndex(grid, next.q, next.r);
       if (previous[nextIndex] !== -2) continue;
       previous[nextIndex] = index;
       queue.push(nextIndex);

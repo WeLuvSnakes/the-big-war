@@ -1,3 +1,4 @@
+import { clamp } from '@the-big-war/game-engine/math/math.service';
 import type { TerrainColorMap, TerrainMixMap } from './theme.types';
 
 export type * from './theme.types';
@@ -140,9 +141,9 @@ export function mixColor(a: number, b: number, t: number): number {
 }
 
 export function shadeColor(color: number, factor: number): number {
-  const r = Math.min(255, Math.max(0, Math.round(((color >> 16) & 0xff) * factor)));
-  const g = Math.min(255, Math.max(0, Math.round(((color >> 8) & 0xff) * factor)));
-  const b = Math.min(255, Math.max(0, Math.round((color & 0xff) * factor)));
+  const r = clamp(Math.round(((color >> 16) & 0xff) * factor), 0, 255);
+  const g = clamp(Math.round(((color >> 8) & 0xff) * factor), 0, 255);
+  const b = clamp(Math.round((color & 0xff) * factor), 0, 255);
   return (r << 16) | (g << 8) | b;
 }
 

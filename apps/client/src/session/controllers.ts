@@ -1,3 +1,4 @@
+import { clampPercent } from '@the-big-war/game-engine/math/math.service';
 
 
 import { createSignal } from 'solid-js';
@@ -189,7 +190,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
     notices,
     selectHex,
     setHover: setHoverHex,
-    setTroopPercent: percent => setTroopPercentSignal(Math.round(Math.min(100, Math.max(1, percent)))),
+    setTroopPercent: percent => setTroopPercentSignal(clampPercent(percent)),
     setTool,
     cancelTool,
     hexAtScreen,

@@ -3,6 +3,7 @@ import { Container, Graphics } from 'pixi.js';
 import type { HexRange } from './terrain-layer';
 import type { HexCell } from '../game/map/map.types';
 import type { PlacementGhost } from './overlay-layer.types';
+import { clamp01 } from '@the-big-war/game-engine/math/math.service';
 import { BUILDING_SPRITES, SPRITE_PALETTE, SPRITE_SIZE } from './pixel-sprites';
 import { axialToPixel } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import type { AxialGrid } from '@the-big-war/game-engine/world-tile/world-tile.types';
@@ -146,7 +147,7 @@ export class BuildingsLayer {
     const top = y + hexSize * 0.42;
     this.progress.rect(left - 1, top - 1, width + 2, height + 2);
     this.progress.fill({ color: BAR_BACK, alpha: 0.85 });
-    this.progress.rect(left, top, width * Math.min(1, Math.max(0, done)), height);
+    this.progress.rect(left, top, width * clamp01(done), height);
     this.progress.fill({ color: BAR_FILL });
   }
 
