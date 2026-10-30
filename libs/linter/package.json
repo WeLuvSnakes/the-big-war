@@ -7,6 +7,6 @@
     "tbw-lint": "./src/cli.ts"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.3"
+    "@types/bun": "^1.4.4"
   }
 }

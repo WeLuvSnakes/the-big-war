@@ -5,6 +5,6 @@
   "type": "module",
   "dependencies": {
     "@the-big-war/game-engine": "workspace:*",
-    "solid-js": "^1.9.17"
+    "solid-js": "^1.9.18"
   }
 }
