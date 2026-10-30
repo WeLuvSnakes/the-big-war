@@ -10,7 +10,7 @@ import { heapPop } from '@the-big-war/game-engine/collections/min-heap.service';
 import { attackPowerAt, defencePowerAt } from '../../offensive/wave-power.service';
 import { addToEncampments, drawFromEncampments } from '../../troops/troops.service';
 import { gridAt, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import { biomeDefenceAt, biomeSpeedAt, isPassable, terrainDefenceAt, tileScale } from '../../map/terrain.service';
+import { biomeSpeedAt, isPassable, terrainDefenceAt, tileScale } from '../../map/terrain.service';
 import {
   canEnter,
   defendersAt,
@@ -151,12 +151,8 @@ function tileEffort(state: GameState, cell: HexCell): number {
 }
 
 function tileCost(state: GameState, offensive: Offensive, cell: HexCell): number {
+  if (offensive.target === NEUTRAL_OWNER) return 0;
   const { wave } = state.config;
-  const terrain = terrainDefenceAt(state, cell);
-  if (offensive.target === NEUTRAL_OWNER) {
-    const mountain = isPassable(cell.terrain) ? 1 : ENGINE_TUNING.mountainClaimSoldiers;
-    return wave.neutralTroopsPerTile * terrain * mountain * biomeDefenceAt(state, cell);
-  }
   const defender = state.empires[offensive.target]!;
   const density = defender.soldiers / Math.max(1, defender.hexCount);
   const held = Math.max(wave.minTroopsPerTile, density * wave.densityWeight);

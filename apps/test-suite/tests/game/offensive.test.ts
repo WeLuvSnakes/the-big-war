@@ -214,7 +214,7 @@ describe('claiming the wild', () => {
     expect(owned(state, 0)).toBe(WIDTH * HEIGHT - CORNER_TILES);
   });
 
-  test('spent claims are lost and the survivors return when the land runs out', () => {
+  test('claiming empty land costs no troops and the whole wave returns', () => {
     const state = wild();
     state.empires[0]!.civilians = 0;
     attack(state, 0, { q: 1, r: 2 }, 100);
@@ -222,19 +222,18 @@ describe('claiming the wild', () => {
     expect(deployedTroops(state, 0)).toBe(100);
     run(state, 120);
     expect(state.offensives).toHaveLength(0);
-    const claimed = WIDTH * HEIGHT - HEIGHT - CORNER_TILES;
-    const cost = claimed * state.config.wave.neutralTroopsPerTile;
-    expect(state.empires[0]!.soldiers).toBeCloseTo(100 - cost, 3);
+    expect(owned(state, 0)).toBe(WIDTH * HEIGHT - CORNER_TILES);
+    expect(state.empires[0]!.soldiers).toBe(100);
   });
 
-  test('a wave stops when its troops run out', () => {
+  test('a single troop can claim the wild without being lost', () => {
     const state = wild();
     setTroops(state, 0, 1);
     attack(state, 0, { q: 1, r: 2 }, 100);
-    run(state, 30);
+    run(state, 300);
     expect(state.offensives).toHaveLength(0);
-    const affordable = Math.floor(1 / state.config.wave.neutralTroopsPerTile);
-    expect(owned(state, 0)).toBe(HEIGHT + affordable);
+    expect(owned(state, 0)).toBe(WIDTH * HEIGHT - CORNER_TILES);
+    expect(state.empires[0]!.soldiers).toBe(1);
   });
 
   test('more troops advance faster', () => {
@@ -266,14 +265,14 @@ describe('claiming the wild', () => {
       if (cell.q >= 2 && cell.owner !== 1) expect(cell.owner).toBe(NEUTRAL_OWNER);
     }
 
-    const before = state.empires[0]!.soldiers;
+    const reserve = state.empires[0]!.soldiers;
     attack(state, 0, { q: 2, r: 2 }, 100);
     run(state, 10);
     const pass = gridAt(state.grid, { q: 2, r: 2 })!;
     expect(pass.owner).toBe(0);
     expect(pass.terrain).toBe('mountain');
     expect(gridAt(state.grid, { q: 2, r: 1 })!.owner).toBe(NEUTRAL_OWNER);
-    expect(state.empires[0]!.soldiers).toBeLessThan(before);
+    expect(deployedTroops(state, 0)).toBe(reserve);
   });
 
   test('a wave into the wild stops at other nations and never attacks them', () => {
