@@ -6,10 +6,6 @@ import { aggregateModifiers } from '../modifier/modifier.service';
 import type { ResearchNode, ResearchOption } from './research.types';
 import type { Empire, EmpireId, EmpireResearch } from '../empire/empire.types';
 
-export function researchNode(id: string): ResearchNode | undefined {
-  return RESEARCH_BY_ID.get(id);
-}
-
 export function isComplete(research: EmpireResearch, nodeId: string): boolean {
   return research.completed.includes(nodeId);
 }

@@ -5,12 +5,10 @@ import type { HotbarProps } from './Hotbar.types';
 import { createSignal, For, Show } from 'solid-js';
 import { classes } from '@the-big-war/frontend/ui/format/format';
 import { gameStore, live } from '../../game/store/store.service';
-import { hasUnlock } from '../../game/research/research.service';
 import { FaInfoCircle } from '@the-big-war/frontend/ui/icons/icons';
-import { placementError } from '../../game/building/building.service';
 import type { BuildingKind } from '../../game/building/building.types';
 import { BUILDING_KINDS } from '../../game/building/building.constants';
-import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
+import { buildingCost, isBuildingUnlocked, placementError } from '../../game/building/building.service';
 
 export type { HotbarProps };
 
@@ -20,11 +18,10 @@ export const Hotbar = (props: HotbarProps) => {
   const store = gameStore();
   const me = live(() => store.state.empires[store.state.playerEmpire]!);
 
-  const cost = (kind: BuildingKind): number =>
-    resolveModifier(store.state.config.buildings[kind].cost, me().bonuses.buildCost);
+  const cost = (kind: BuildingKind): number => buildingCost(store.state, store.state.playerEmpire, kind);
 
   const unlocked = (kind: BuildingKind): boolean =>
-    !store.state.config.buildings[kind].requiresResearch || hasUnlock(me(), `building:${kind}`);
+    isBuildingUnlocked(store.state, store.state.playerEmpire, kind);
 
   const [hovered, setHovered] = createSignal<BuildingKind | null>(null);
 

@@ -8,10 +8,10 @@ import { NEUTRAL_OWNER } from '../empire/empire.constants';
 import { addToEncampments } from '../troops/troops.service';
 import { scaleConfigToMap } from '../config/config.service';
 import { createBuilding } from '../building/building.service';
-import { defaultFactionId } from '../faction/faction.service';
 import type { BuildingKind } from '../building/building.types';
 import { isClaimable, isPassable } from '../map/terrain.service';
 import type { Rng } from '@the-big-war/game-engine/rng/rng.types';
+import { recomputeAllBonuses } from '../research/research.service';
 import { isPortSite, portWaterBody } from '../map/port-site.service';
 import type { HexCell, HexGrid, WorldLabels } from '../map/map.types';
 import { createEmpire, refreshHexCounts } from '../empire/empire.service';
@@ -20,7 +20,6 @@ import { NEUTRAL_PLOT, START_CITY_LEVEL, START_PLOT } from './setup.constants';
 import { ownedCells, setBuilding, setOwner } from '../map/world-index.service';
 import { generateWorld, pruneLoneMountains } from '../map/map-generator.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { recomputeAllBonuses, recomputeEmpireBonuses } from '../research/research.service';
 import { distance, gridAt, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 function startPlot(capital: Axial, size = START_PLOT): Axial[] {
@@ -114,14 +113,6 @@ function createEmpires(config: GameConfig): Empire[] {
     );
   }
   return empires;
-}
-
-export function assignBotFactions(state: GameState, factionIds: readonly string[]): void {
-  for (const empire of state.empires) {
-    if (empire.isHuman && empire.factionId !== '') continue;
-    empire.factionId = defaultFactionId(empire.id, factionIds);
-    recomputeEmpireBonuses(state, empire.id);
-  }
 }
 
 export function createInitialState(baseConfig: GameConfig): GameState {

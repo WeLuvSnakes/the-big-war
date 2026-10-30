@@ -3,8 +3,8 @@ import { For, Show } from 'solid-js';
 import { Panel } from '@the-big-war/frontend/ui/panel/Panel';
 import type { Empire } from '../../game/empire/empire.types';
 import type { DiplomacyPanelProps } from './DiplomacyPanel.types';
-import { gameStore, live as tracked, whenSettled } from '../../game/store/store.service';
-import { getRelation, offerCooldown, pendingOffer, treatySecondsLeft } from '../../game/diplomacy/diplomacy.service';
+import { gameStore, live as tracked } from '../../game/store/store.service';
+import { diplomacyWaitSeconds, getRelation, pendingOffer } from '../../game/diplomacy/diplomacy.service';
 
 export type { DiplomacyPanelProps };
 
@@ -18,20 +18,16 @@ export const DiplomacyPanel = (props: DiplomacyPanelProps) => {
 
   const offersPeace = (empire: Empire) => pendingOffer(live(), empire.id, player()) !== null;
 
-  const waitSeconds = (empire: Empire): number => {
-    if (!atWar(empire)) return Math.ceil(treatySecondsLeft(live(), player(), empire.id));
-    if (offersPeace(empire)) return 0;
-    const cooldown = offerCooldown(live(), player(), empire.id);
-    return cooldown ? Math.ceil(cooldown.until - live().elapsed) : 0;
-  };
+  const waitSeconds = (empire: Empire): number => diplomacyWaitSeconds(live(), player(), empire.id);
 
   const toggle = (empire: Empire) => {
-    const reply = offersPeace(empire)
-      ? store.dispatch({ type: 'RespondOffer', empire: player(), from: empire.id, accept: true })
-      : store.dispatch({ type: atWar(empire) ? 'OfferPeace' : 'DeclareWar', empire: player(), target: empire.id });
-    whenSettled(reply, result => {
-      if (!result.ok) props.controllers?.notice(result.reason);
-    });
+    if (offersPeace(empire)) {
+      props.controllers?.run({ type: 'RespondOffer', empire: player(), from: empire.id, accept: true });
+    } else if (atWar(empire)) {
+      props.controllers?.run({ type: 'OfferPeace', empire: player(), target: empire.id });
+    } else {
+      props.controllers?.run({ type: 'DeclareWar', empire: player(), target: empire.id });
+    }
   };
 
   return (

@@ -44,5 +44,3 @@ export interface GameState extends SimulationState {
   offerCooldowns: Record<string, OfferCooldown>;
   pendingOffers: PendingOffer[];
 }
-
-export type CreateState = (config: GameConfig) => GameState;

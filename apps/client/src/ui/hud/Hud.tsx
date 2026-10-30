@@ -1,13 +1,13 @@
 import './Hud.css';
+import { For, Show } from 'solid-js';
 import type { HudProps } from './Hud.types';
 import { ownerCss } from '../../render/theme';
-import { createSignal, For, Show } from 'solid-js';
 import { OfferPrompts } from '../offer-prompts/OfferPrompts';
 import type { GameSpeed } from '../../game/config/config.types';
 import { gameStore, live } from '../../game/store/store.service';
 import { perSecond } from '@the-big-war/frontend/ui/format/format';
 import { hasUnlimitedResources } from '../../game/empire/empire.service';
-import { useOutsidePointer } from '@the-big-war/frontend/ui/hooks/hooks';
+import { useHoverMenu } from '@the-big-war/frontend/ui/hooks/hover-menu/HoverMenu.hook';
 import { FaAtom, FaUsers, GiCoin, GiCrossedSwords } from '@the-big-war/frontend/ui/icons/icons';
 
 const SPEEDS: readonly GameSpeed[] = [1, 2, 4];
@@ -18,10 +18,9 @@ export type { HudProps };
 
 export const Hud = (props: HudProps) => {
   const store = gameStore();
-  const [speedOpen, setSpeedOpen] = createSignal(false);
   let speedDrop: HTMLDivElement | undefined;
-
-  useOutsidePointer(speedOpen, () => speedDrop, () => setSpeedOpen(false));
+  const speedMenu = useHoverMenu(() => speedDrop);
+  const speedOpen = speedMenu.open;
 
   const currentSpeed = live(() => store.state.speed);
   const me = live(() => store.state.empires[store.state.playerEmpire] ?? store.state.empires[0]!);
@@ -59,97 +58,82 @@ export const Hud = (props: HudProps) => {
         </div>
       </div>
 
-      <div class="street-tray kit-glass" role="group" aria-label="Game controls">
-        <div class="street-stat hud-nation" title="Your nation">
-          <span class="hud-card-swatch" style={{ background: ownerCss(me().colorIndex) }} />
-          <span class="hud-nation-name">{me().name}</span>
-        </div>
-        <div class="rail-divider" />
-        <div
-          ref={el => (speedDrop = el)}
-          class={`hud-speed-drop${speedOpen() ? ' is-open' : ''}`}
-          onPointerEnter={event => {
-            if (event.pointerType === 'mouse') setSpeedOpen(true);
-          }}
-          onPointerLeave={event => {
-            const focused = document.activeElement;
-            const keyboardFocused =
-              focused instanceof HTMLElement && event.currentTarget.contains(focused) && focused.matches(':focus-visible');
-            if (!keyboardFocused) setSpeedOpen(false);
-          }}
-          onFocusIn={event => {
-            if ((event.target as HTMLElement).matches(':focus-visible')) setSpeedOpen(true);
-          }}
-          onFocusOut={event => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSpeedOpen(false);
-          }}
-          onKeyDown={event => {
-            if (event.key === 'Escape') setSpeedOpen(false);
-          }}
-        >
-          <button
-            type="button"
-            class="street-action hud-speed-trigger"
-            aria-label={store.paused() ? 'Resume' : 'Pause'}
-            aria-pressed={store.paused()}
-            title={store.paused() ? 'Resume' : 'Pause'}
-            onClick={() => {
-              store.setPaused(!store.paused());
-              setSpeedOpen(false);
-            }}
+      <div class="hud-side">
+        <div class="street-tray kit-glass" role="group" aria-label="Game controls">
+          <div class="street-stat hud-nation" title="Your nation">
+            <span class="hud-card-swatch" style={{ background: ownerCss(me().colorIndex) }} />
+            <span class="hud-nation-name">{me().name}</span>
+          </div>
+          <div class="rail-divider" />
+          <div
+            ref={el => (speedDrop = el)}
+            class={`hud-speed-drop${speedOpen() ? ' is-open' : ''}`}
+            {...speedMenu.rootProps}
           >
-            <span>{store.paused() ? '▶' : `${currentSpeed()}×`}</span>
-          </button>
-          <button
-            type="button"
-            class="street-action hud-speed-caret"
-            aria-label="Change game speed"
-            aria-haspopup="menu"
-            aria-expanded={speedOpen()}
-            title="Game speed"
-            onClick={() => setSpeedOpen(!speedOpen())}
-          >
-            <span class="hud-speed-caret-icon" aria-hidden="true">▾</span>
-          </button>
-          <div class="hud-speed-menu kit-glass" role="menu" aria-label="Game speed">
-            <For each={SPEEDS}>
-              {speed => (
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={currentSpeed() === speed && !store.paused()}
-                  class={`street-action hud-speed${currentSpeed() === speed && !store.paused() ? ' is-active' : ''}`}
-                  aria-label={`Speed ${speed}×`}
-                  onClick={event => {
-                    store.setPaused(false);
-                    store.setSpeed(speed);
-                    setSpeedOpen(false);
-                    event.currentTarget.blur();
-                  }}
-                >
-                  {speed}×
-                </button>
-              )}
-            </For>
-            <div class="rail-divider" role="separator" />
             <button
               type="button"
-              role="menuitemcheckbox"
-              aria-checked={store.paused()}
-              class={`street-action hud-speed${store.paused() ? ' is-active' : ''}`}
+              class="street-action hud-speed-trigger"
               aria-label={store.paused() ? 'Resume' : 'Pause'}
-              onClick={event => {
+              aria-pressed={store.paused()}
+              title={store.paused() ? 'Resume' : 'Pause'}
+              onClick={() => {
                 store.setPaused(!store.paused());
-                setSpeedOpen(false);
-                event.currentTarget.blur();
+                speedMenu.setOpen(false);
               }}
             >
-              <span aria-hidden="true">{store.paused() ? '▶' : '❚❚'}</span>
+              <span>{store.paused() ? '▶' : `${currentSpeed()}×`}</span>
             </button>
+            <button
+              type="button"
+              class="street-action hud-speed-caret"
+              aria-label="Change game speed"
+              aria-haspopup="menu"
+              aria-expanded={speedOpen()}
+              title="Game speed"
+              onClick={() => speedMenu.setOpen(!speedOpen())}
+            >
+              <span class="hud-speed-caret-icon" aria-hidden="true">▾</span>
+            </button>
+            <div class="hud-speed-menu kit-glass" role="menu" aria-label="Game speed">
+              <For each={SPEEDS}>
+                {speed => (
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={currentSpeed() === speed && !store.paused()}
+                    class={`street-action hud-speed${currentSpeed() === speed && !store.paused() ? ' is-active' : ''}`}
+                    aria-label={`Speed ${speed}×`}
+                    onClick={event => {
+                      store.setPaused(false);
+                      store.setSpeed(speed);
+                      speedMenu.setOpen(false);
+                      event.currentTarget.blur();
+                    }}
+                  >
+                    {speed}×
+                  </button>
+                )}
+              </For>
+              <div class="rail-divider" role="separator" />
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={store.paused()}
+                class={`street-action hud-speed${store.paused() ? ' is-active' : ''}`}
+                aria-label={store.paused() ? 'Resume' : 'Pause'}
+                onClick={event => {
+                  store.setPaused(!store.paused());
+                  speedMenu.setOpen(false);
+                  event.currentTarget.blur();
+                }}
+              >
+                <span aria-hidden="true">{store.paused() ? '▶' : '❚❚'}</span>
+              </button>
+            </div>
           </div>
         </div>
+        <OfferPrompts controllers={props.controllers} />
       </div>
-      <OfferPrompts controllers={props.controllers} />
     </header>
   );
 };

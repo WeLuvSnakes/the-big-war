@@ -1,5 +1,4 @@
 import type { Terrain } from '../game/map/map.types';
-import { FACTIONS } from '../game/faction/faction.constants';
 import type { BuildingKind } from '../game/building/building.types';
 import type { CommandError } from '../game/commands/commands.types';
 
@@ -47,11 +46,6 @@ const BUILDING_DESCRIPTIONS: Readonly<Record<BuildingKind, string>> = {
 
 export function buildingDescription(kind: BuildingKind): string {
   return BUILDING_DESCRIPTIONS[kind];
-}
-
-export function factionLabel(factionId: string): string {
-  const faction = FACTIONS.find(entry => entry.id === factionId);
-  return faction?.name ?? factionId;
 }
 
 const TERRAIN_LABELS: Readonly<Record<Terrain, string>> = {

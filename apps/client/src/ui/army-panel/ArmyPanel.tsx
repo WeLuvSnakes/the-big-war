@@ -1,9 +1,8 @@
-
-
 import './ArmyPanel.css';
 import { For, Show } from 'solid-js';
 
 import { ownerCss } from '../../render/theme';
+import { missionLabel } from './ArmyPanel.utility';
 import type { ArmyPanelProps } from './ArmyPanel.types';
 import { Panel } from '@the-big-war/frontend/ui/panel/Panel';
 import { gameStore, live } from '../../game/store/store.service';
@@ -11,6 +10,7 @@ import { deployedTroops } from '../../game/troops/troops.service';
 import { NEUTRAL_OWNER } from '../../game/empire/empire.constants';
 import type { Offensive } from '../../game/offensive/offensive.types';
 import { FaFlag, FaTimes, FaUsers } from '@the-big-war/frontend/ui/icons/icons';
+import { offensivesAgainst, offensivesOf } from '../../game/offensive/offensive.service';
 
 export type { ArmyPanelProps };
 
@@ -18,12 +18,8 @@ export const ArmyPanel = (props: ArmyPanelProps) => {
   const store = gameStore();
   const player = live(() => store.state.playerEmpire);
 
-  const myOffensives = live((): readonly Offensive[] =>
-    store.state.offensives.filter(offensive => offensive.empire === player()),
-  );
-  const incoming = live((): readonly Offensive[] =>
-    store.state.offensives.filter(offensive => offensive.target === player()),
-  );
+  const myOffensives = live(() => offensivesOf(store.state, player()));
+  const incoming = live(() => offensivesAgainst(store.state, player()));
   const troopsOf = (offensive: Offensive): number => live(() => Math.ceil(offensive.troops))();
   const takenBy = (offensive: Offensive): number => live(() => offensive.taken)();
   const reserve = live(() => Math.floor(store.state.empires[player()]?.soldiers ?? 0));
@@ -45,15 +41,9 @@ export const ArmyPanel = (props: ArmyPanelProps) => {
     props.controllers.selectHex(offensive.head);
     props.onClose();
   };
-  const missionLabel = (offensive: Offensive): string => {
-    if (offensive.mission === 'hold') return 'Holding';
-    if (offensive.mission === 'retreat') return 'Retreating';
-    return `${takenBy(offensive)} tiles taken`;
-  };
-
   const recall = (offensive: Offensive) => {
     if (focused() === offensive.id) props.controllers.focusOffensive(null);
-    store.dispatch({ type: 'RecallOffensive', empire: player(), offensive: offensive.id });
+    props.controllers.run({ type: 'RecallOffensive', empire: player(), offensive: offensive.id });
   };
 
   return (
@@ -100,7 +90,9 @@ export const ArmyPanel = (props: ArmyPanelProps) => {
                 </button>
               </div>
               <span class="army-sub">
-                {focused() === offensive.id ? 'Click the map to move, hold or attack' : missionLabel(offensive)}
+                {focused() === offensive.id
+                  ? 'Click the map to move, hold or attack'
+                  : missionLabel(offensive.mission, takenBy(offensive))}
               </span>
             </div>
           )}

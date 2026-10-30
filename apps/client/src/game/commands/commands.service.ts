@@ -37,7 +37,3 @@ export const dispatch = createDispatcher<GameState, Command, CommandResult>({
   DeclareWar: handleDeclareWar,
   RespondOffer: handleRespondOffer,
 });
-
-export function dispatchAll(state: GameState, commands: readonly Command[]): CommandResult[] {
-  return commands.map(command => dispatch(state, command));
-}

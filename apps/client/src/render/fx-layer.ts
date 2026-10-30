@@ -1,7 +1,5 @@
-
-
 import { Container, Graphics } from 'pixi.js';
-import { ACCENT_COLOR, DANGER_COLOR, ownerColor } from './theme';
+import { ACCENT_COLOR, DANGER_COLOR } from './theme';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { axialToPixel } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
@@ -119,10 +117,6 @@ function defaultColor(kind: FxKind): number {
   if (kind === 'cannonPuff') return 0x555555;
   if (kind === 'captureFlash') return ACCENT_COLOR;
   return DANGER_COLOR;
-}
-
-export function fxColorForOwner(owner: number): number {
-  return ownerColor(owner);
 }
 
 function hexagon(center: { x: number; y: number }, size: number): number[] {

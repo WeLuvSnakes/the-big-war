@@ -90,9 +90,6 @@ export const HEX_SHADE_MAX = 0.06;
 export const HEX_BORDER_WIDTH = 3;
 export const HEX_BORDER_DARKEN = 0.35;
 
-export const FRONT_EDGE_COLOR = 0xff6a3d;
-export const FRONT_EDGE_WIDTH = 2.5;
-
 export const SELECTION_COLOR = 0xffffff;
 export const SELECTION_WIDTH = 3;
 export const HOVER_COLOR = 0xf0f0f0;
@@ -101,7 +98,6 @@ export const HOVER_WIDTH = 1.5;
 export const ACCENT_COLOR = 0xf0c850;
 export const DANGER_COLOR = 0xe03232;
 export const INFO_COLOR = 0x5db6e5;
-export const SUCCESS_COLOR = 0x72cc72;
 
 export const DEMOLISH_DIM = 0.35;
 

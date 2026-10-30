@@ -1,5 +1,3 @@
-
-
 import './Shell.css';
 import { Hud } from '../hud/Hud';
 import { errorLabel } from '../text';
@@ -19,13 +17,14 @@ import type { NoticesProps, PanelId } from './Shell.types';
 import { DeploySlider } from '../deploy-slider/DeploySlider';
 import { assignNationColors } from '../../render/nation-colors';
 import { ResearchPanel } from '../research-panel/ResearchPanel';
-import { useEvent } from '@the-big-war/frontend/ui/hooks/hooks';
 import { gameStore, live } from '../../game/store/store.service';
 import { DiplomacyPanel } from '../diplomacy-panel/DiplomacyPanel';
 import { createWorld, type WorldRenderer } from '../../render/world';
+import { offensivesOf } from '../../game/offensive/offensive.service';
 import { Rail, RailAction } from '@the-big-war/frontend/ui/rail/Rail';
 import type { BuildingKind } from '../../game/building/building.types';
 import { pendingOffersTo } from '../../game/diplomacy/diplomacy.service';
+import { useEvent } from '@the-big-war/frontend/ui/hooks/event/Event.hook';
 import { createAttractMode, type AttractMode } from '../../session/attract';
 import { createMatchRuntime, type MatchRuntime } from '../../session/runtime';
 import { gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
@@ -149,7 +148,7 @@ export const Shell = () => {
   };
   const closePanel = (id: Exclude<PanelId, null>) => () => setPanel(current => (current === id ? null : current));
 
-  const activeWaves = live(() => store.state.offensives.filter(item => item.empire === store.state.playerEmpire).length);
+  const activeWaves = live(() => offensivesOf(store.state, store.state.playerEmpire).length);
   const pendingOfferCount = live(() => pendingOffersTo(store.state, store.state.playerEmpire).length);
 
   const ownPortSelected = live(() => {

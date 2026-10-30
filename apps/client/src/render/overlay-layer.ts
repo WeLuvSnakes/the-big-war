@@ -4,7 +4,7 @@ import { Container, Graphics } from 'pixi.js';
 import type { OverlayState, SpawnPlot } from './overlay-layer.types';
 import { PLOT_BEFORE, START_PLOT } from '../game/state/setup.constants';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { axialToPixel, distance, hexCorners, ring } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { axialToPixel, hexCorners, ring } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import {
   DANGER_COLOR,
   HOVER_COLOR,
@@ -111,8 +111,4 @@ function hexPolygon(center: Pixel, size: number): number[] {
 
 function sameHex(a: Axial, b: Axial | null): boolean {
   return b !== null && a.q === b.q && a.r === b.r;
-}
-
-export function inCannonRange(from: Axial, target: Axial, range: number): boolean {
-  return distance(from, target) <= range;
 }

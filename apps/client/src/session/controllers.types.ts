@@ -2,9 +2,9 @@ import type { Accessor } from 'solid-js';
 import type { ShipId } from '../game/ship/ship.types';
 import type { ClientStore } from '../game/store/store.types';
 import type { BuildingKind } from '../game/building/building.types';
-import type { CommandError } from '../game/commands/commands.types';
 import type { OffensiveId } from '../game/offensive/offensive.types';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
+import type { Command, CommandError, CommandResult } from '../game/commands/commands.types';
 
 export type Tool =
   | { readonly kind: 'idle' }
@@ -44,7 +44,9 @@ export interface Controllers {
   secondary(at: Pixel): void;
   
   key(key: string): void;
-  
+
+  run(command: Command, onDone?: (result: CommandResult) => void): void;
+
   notice(reason: CommandError): void;
   dismissNotice(id: number): void;
 }

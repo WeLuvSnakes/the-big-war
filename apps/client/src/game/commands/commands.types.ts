@@ -192,8 +192,6 @@ export type Command =
   | DeclareWarCommand
   | RespondOfferCommand;
 
-export type CommandType = Command['type'];
-
 export type CommandResult = CommandOutcome<Command, CommandError>;
 
 export type CommandLogEntry = EngineCommandLogEntry<Command, CommandResult>;

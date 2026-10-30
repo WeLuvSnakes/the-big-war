@@ -16,6 +16,17 @@
     pointer-events: auto;
 }
 
+.hud-side {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+}
+
+.hud-side > * {
+    pointer-events: auto;
+}
+
 .hud-speed {
     font-size: 14px;
     font-weight: 700;

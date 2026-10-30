@@ -36,3 +36,10 @@ export interface OptionListProps<T extends string | number> {
   readonly hint: (option: T) => string;
   readonly onSelect: (option: T) => void;
 }
+
+export interface MenuDeck {
+  selected(): number;
+  offsetOf(index: number): number;
+  go(index: number): void;
+  goBy(delta: number): void;
+}

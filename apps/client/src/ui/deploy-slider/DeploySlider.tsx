@@ -1,8 +1,8 @@
 import './DeploySlider.css';
 import type { DeploySliderProps } from './DeploySlider.types';
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import { useOutsidePointer } from '@the-big-war/frontend/ui/hooks/hooks';
 import { FaUndo, GiCrossedSwords } from '@the-big-war/frontend/ui/icons/icons';
+import { useHoverMenu } from '@the-big-war/frontend/ui/hooks/hover-menu/HoverMenu.hook';
 
 export type { DeploySliderProps };
 
@@ -10,10 +10,9 @@ const PERCENTS = [25, 50, 75, 100] as const;
 
 export const DeploySlider = (props: DeploySliderProps) => {
   const percent = () => props.controllers.troopPercent();
-  const [open, setOpen] = createSignal(false);
   let drop: HTMLDivElement | undefined;
-
-  useOutsidePointer(open, () => drop, () => setOpen(false));
+  const menu = useHoverMenu(() => drop);
+  const open = menu.open;
 
   const [height, setHeight] = createSignal<number | null>(null);
   onMount(() => {
@@ -45,24 +44,7 @@ export const DeploySlider = (props: DeploySliderProps) => {
         <div
           ref={el => (drop = el)}
           class={`hud-speed-drop deploy-slider-drop${open() ? ' is-open' : ''}`}
-          onPointerEnter={event => {
-            if (event.pointerType === 'mouse') setOpen(true);
-          }}
-          onPointerLeave={event => {
-            const focused = document.activeElement;
-            const keyboardFocused =
-              focused instanceof HTMLElement && event.currentTarget.contains(focused) && focused.matches(':focus-visible');
-            if (!keyboardFocused) setOpen(false);
-          }}
-          onFocusIn={event => {
-            if ((event.target as HTMLElement).matches(':focus-visible')) setOpen(true);
-          }}
-          onFocusOut={event => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
-          }}
-          onKeyDown={event => {
-            if (event.key === 'Escape') setOpen(false);
-          }}
+          {...menu.rootProps}
         >
           <button
             type="button"
@@ -72,7 +54,7 @@ export const DeploySlider = (props: DeploySliderProps) => {
             aria-haspopup="menu"
             aria-expanded={open()}
             aria-live="polite"
-            onClick={() => setOpen(!open())}
+            onClick={() => menu.setOpen(!open())}
           >
             <GiCrossedSwords />
             <span class="deploy-slider-value">{percent()}%</span>
@@ -87,7 +69,7 @@ export const DeploySlider = (props: DeploySliderProps) => {
                   class={`street-action hud-speed${percent() === value ? ' is-active' : ''}`}
                   onClick={event => {
                     props.controllers.setTroopPercent(value);
-                    setOpen(false);
+                    menu.setOpen(false);
                     event.currentTarget.blur();
                   }}
                 >

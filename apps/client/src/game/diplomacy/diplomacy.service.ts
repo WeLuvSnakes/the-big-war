@@ -35,6 +35,15 @@ export function treatySecondsLeft(state: GameState, a: EmpireId, b: EmpireId): n
   return treatyUntil === null ? 0 : Math.max(0, treatyUntil - state.elapsed);
 }
 
+export function diplomacyWaitSeconds(state: GameState, player: EmpireId, target: EmpireId): number {
+  if (getRelation(state, player, target).status !== 'war') {
+    return Math.ceil(treatySecondsLeft(state, player, target));
+  }
+  if (pendingOffer(state, target, player)) return 0;
+  const cooldown = offerCooldown(state, player, target);
+  return cooldown ? Math.ceil(cooldown.until - state.elapsed) : 0;
+}
+
 export function isProtected(state: GameState, a: EmpireId, b: EmpireId): boolean {
   return a !== b && treatySecondsLeft(state, a, b) > 0;
 }

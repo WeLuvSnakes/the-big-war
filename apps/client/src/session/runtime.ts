@@ -4,7 +4,6 @@ import { audio } from '../audio/audio.service';
 import { createControllers } from './controllers';
 import type { Camera } from '../render/world.types';
 import { createMatchAudio } from '../audio/match-audio';
-import { whenSettled } from '../game/store/store.service';
 import { panBy } from '@the-big-war/frontend/session/camera';
 import type { SpawnPlot } from '../render/overlay-layer.types';
 import { placementError } from '../game/building/building.service';
@@ -102,11 +101,7 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
   const pickSpawn = (at: Pixel) => {
     const target = localToHex(at);
     if (!target) return;
-    whenSettled(store.dispatch({ type: 'ChooseSpawn', empire: store.state.playerEmpire, target }), result => {
-      if (!result.ok) {
-        controllers.notice(result.reason);
-        return;
-      }
+    controllers.run({ type: 'ChooseSpawn', empire: store.state.playerEmpire, target }, () => {
       world.spawnFx('captureFlash', target, undefined);
       runtime.confirmSpawn();
     });
@@ -215,11 +210,7 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
     },
     confirmSpawn(): void {
       setChoosingSpawn(false);
-      whenSettled(store.dispatch({ type: 'ConfirmSpawn' }), result => {
-        if (!result.ok) {
-          controllers.notice(result.reason);
-          return;
-        }
+      controllers.run({ type: 'ConfirmSpawn' }, () => {
         store.setPaused(false);
         runtime.fillScreenFromLeft();
       });

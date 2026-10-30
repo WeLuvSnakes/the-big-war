@@ -2,82 +2,34 @@ import './MenuScreen.css';
 import { openAbout } from '../about/about';
 import { paintPreview } from './map-preview';
 import { FactionSprite } from './FactionSprite';
-import type { MapPreset } from '../../game/map/map.types';
 import { FACTIONS } from '../../game/faction/faction.constants';
 import { isUnlimitedName } from '../../game/empire/empire.service';
 import type { FactionDef } from '../../game/faction/faction.types';
-import type { Modifier } from '../../game/modifier/modifier.types';
-import { signed, signedPercent } from '@the-big-war/frontend/ui/format/format';
 import { MAP_PRESET_LABELS, MAP_PRESET_ORDER } from '../../game/map/map.constants';
+import { canHover } from '@the-big-war/frontend/ui/hooks/hover-menu/HoverMenu.hook';
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { DIFFICULTY_ORDER, NEUTRAL_STATES_ORDER, rivalFactions } from '../../session/flow';
 import { CHEAT_UNLIMITED_PERK, CHEAT_UNLIMITED_TITLE } from '../../game/empire/empire.constants';
 import type { DropdownProps, MapPreviewProps, MenuDropdown, MenuScreenProps, OptionListProps } from './MenuScreen.types';
-import { DIFFICULTY_ORDER, NEUTRAL_STATES_ORDER, PRESET_MAP_SIZES, rivalFactions, type Difficulty, type MapSize, type NeutralStates } from '../../session/flow';
+import {
+  COLOR_OPTIONS,
+  RIVAL_COUNTS,
+  bonusLine,
+  createMenuDeck,
+  difficultyHint,
+  difficultyLabel,
+  factionById,
+  isBuff,
+  neutralStatesHint,
+  neutralStatesLabel,
+  rivalsHint,
+  rivalsLabel,
+  worldSettings,
+  worldSizeLabel,
+  worldTrait,
+} from './MenuScreen.utility';
 
 export type { DropdownProps, MapPreviewProps, MenuDropdown, MenuScreenProps, OptionListProps };
-
-const difficultyLabel = (difficulty: Difficulty): string =>
-  difficulty === 'easy' ? 'City Sim' : difficulty === 'normal' ? 'Nothing Personal' : 'Hurt Me';
-
-const difficultyHint = (difficulty: Difficulty): string =>
-  difficulty === 'easy' ? 'Rivals sit back' : difficulty === 'normal' ? 'A fair fight' : 'No mercy';
-
-const neutralStatesLabel = (amount: NeutralStates): string =>
-  amount === 'none' ? 'None' : amount === 'few' ? 'Few' : 'Many';
-
-const neutralStatesHint = (amount: NeutralStates): string =>
-  amount === 'none' ? 'Rivals only' : amount === 'few' ? 'Some to swallow' : 'A crowded world';
-
-const WORLD_SIZE_LABELS: Readonly<Record<MapSize, string>> = {
-  skirmish: 'Small',
-  regional: 'Medium',
-  continental: 'Large',
-  world: 'Huge',
-};
-
-const WORLD_TRAITS: Readonly<Record<MapPreset, string>> = {
-  continents: 'Mixed lands',
-  pangaea: 'One landmass',
-  twin_continents: 'Two shores',
-  archipelago: 'Island hopping',
-  inland_sea: 'Central sea',
-  atoll_ring: 'Ring of islands',
-  river_delta: 'Rivers and swamp',
-  straits: 'Narrow crossings',
-  skull: 'Silhouette',
-  snake: 'Silhouette',
-  crescent: 'Silhouette',
-};
-
-const RIVAL_COUNTS = [1, 3, 7, 15] as const;
-
-const rivalsLabel = (count: number): string =>
-  count === 1 ? 'Duel' : count === 3 ? 'Melee' : count === 7 ? 'Great War' : 'World War';
-
-const rivalsHint = (count: number): string => (count === 1 ? '1 rival' : `${count} rivals`);
-
-const factionById = (id: string): FactionDef => FACTIONS.find(faction => faction.id === id) ?? FACTIONS[0]!;
-
-const MODIFIER_LABELS: Readonly<Record<string, string>> = {
-  attack: 'attack',
-  defence: 'defence',
-  goldIncome: 'gold',
-  buildCost: 'build cost',
-  growth: 'growth',
-  scienceRate: 'science',
-  frontDefence: 'wave defence',
-  reserveCap: 'reserve cap',
-};
-
-function bonusLine(modifier: Modifier): string {
-  const name = MODIFIER_LABELS[modifier.key] ?? modifier.key;
-  if (modifier.mul !== undefined) return `${signedPercent(Math.round((modifier.mul - 1) * 100))} ${name}`;
-  if (modifier.add !== undefined) return `${signed(modifier.add)} ${name}`;
-  return name;
-}
-
-const isBuff = (modifier: Modifier): boolean =>
-  modifier.key === 'buildCost' ? (modifier.mul ?? 1) < 1 : (modifier.mul ?? 1) >= 1 && (modifier.add ?? 0) >= 0;
 
 const Bonuses = (props: { faction: FactionDef }) => (
   <span class="setup-bonuses">
@@ -103,13 +55,11 @@ const CONFIRM_MS = 3000;
 const DRAG_STEP_PX = 60;
 const WHEEL_GAP_MS = 220;
 
-const hasHover = (): boolean => globalThis.matchMedia?.('(hover: hover)').matches ?? false;
-
 const Dropdown = (props: DropdownProps) => {
   let closing: ReturnType<typeof setTimeout> | undefined;
   const stay = () => clearTimeout(closing);
   const leave = (event: MouseEvent) => {
-    if (!hasHover()) return;
+    if (!canHover()) return;
     const typing = (event.currentTarget as HTMLElement).contains(document.activeElement) && document.activeElement?.tagName === 'INPUT';
     if (!typing) closing = setTimeout(() => props.onToggle(false), CLOSE_DELAY_MS);
   };
@@ -119,7 +69,7 @@ const Dropdown = (props: DropdownProps) => {
       class={`setup-dropdown ${props.class}`}
       onMouseEnter={() => {
         stay();
-        if (hasHover()) props.onToggle(true);
+        if (canHover()) props.onToggle(true);
       }}
       onMouseLeave={leave}
       onClick={event => event.stopPropagation()}
@@ -130,7 +80,7 @@ const Dropdown = (props: DropdownProps) => {
         aria-haspopup="true"
         aria-expanded={props.open}
         aria-label={props.label}
-        onClick={() => props.onToggle(hasHover() || !props.open)}
+        onClick={() => props.onToggle(canHover() || !props.open)}
       >
         {props.trigger}
         <span class="setup-chevron" aria-hidden="true">▾</span>
@@ -172,8 +122,6 @@ const TileValue = (props: { icon: string; label: string; value: string }) => (
   </>
 );
 
-const COLOR_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
-
 export const MenuScreen = (props: MenuScreenProps) => {
   const [playerColor, setPlayerColor] = createSignal(props.playerColorIndex ?? 0);
   const [opened, setOpened] = createSignal<MenuDropdown | null>(null);
@@ -187,18 +135,7 @@ export const MenuScreen = (props: MenuScreenProps) => {
 
   const promised = () => isUnlimitedName(props.playerName);
   const faction = () => factionById(props.faction);
-  const selected = () => Math.max(0, MAP_PRESET_ORDER.indexOf(props.settings.preset));
-  const count = MAP_PRESET_ORDER.length;
-
-  const worldSettings = (preset: MapPreset) => ({ ...props.settings, preset, mapSize: PRESET_MAP_SIZES[preset] });
-  const go = (index: number) => {
-    const preset = MAP_PRESET_ORDER[(index + count) % count]!;
-    props.onChange({ preset, mapSize: PRESET_MAP_SIZES[preset] });
-  };
-  const offsetOf = (index: number): number => {
-    const offset = (index - selected() + count) % count;
-    return offset > count / 2 ? offset - count : offset;
-  };
+  const deck = createMenuDeck(() => props.settings, props.onChange);
 
   const toggle = (id: MenuDropdown, open: boolean) =>
     setOpened(current => (open ? id : current === id ? null : current));
@@ -231,8 +168,8 @@ export const MenuScreen = (props: MenuScreenProps) => {
       disarm();
     }
     if ((event.target as HTMLElement).tagName === 'INPUT') return;
-    if (event.key === 'ArrowLeft') go(selected() - 1);
-    if (event.key === 'ArrowRight') go(selected() + 1);
+    if (event.key === 'ArrowLeft') deck.goBy(-1);
+    if (event.key === 'ArrowRight') deck.goBy(1);
   };
   const onWheel = (event: WheelEvent) => {
     const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
@@ -240,7 +177,7 @@ export const MenuScreen = (props: MenuScreenProps) => {
     if (Math.abs(delta) < 8 || now - lastWheel < WHEEL_GAP_MS) return;
     lastWheel = now;
     event.preventDefault();
-    go(selected() + Math.sign(delta));
+    deck.goBy(Math.sign(delta));
   };
   const onDrag = (event: PointerEvent) => {
     if (dragX === null) return;
@@ -248,7 +185,7 @@ export const MenuScreen = (props: MenuScreenProps) => {
     if (Math.abs(delta) < DRAG_STEP_PX) return;
     dragged = true;
     dragX = event.clientX;
-    go(selected() - Math.sign(delta));
+    deck.goBy(-Math.sign(delta));
   };
 
   onMount(() => {
@@ -351,7 +288,7 @@ export const MenuScreen = (props: MenuScreenProps) => {
         <div class="setup-deck">
           <For each={MAP_PRESET_ORDER}>
             {(preset, index) => {
-              const offset = () => offsetOf(index());
+              const offset = () => deck.offsetOf(index());
               const distance = () => Math.abs(offset());
               return (
                 <button
@@ -367,21 +304,21 @@ export const MenuScreen = (props: MenuScreenProps) => {
                     'pointer-events': distance() > 2 ? 'none' : 'auto',
                   }}
                   onClick={() => {
-                    if (!dragged) go(index());
+                    if (!dragged) deck.go(index());
                   }}
                 >
-                  <MapPreview class="setup-map-image" settings={worldSettings(preset)} />
+                  <MapPreview class="setup-map-image" settings={worldSettings(props.settings, preset)} />
                   <span class="setup-map-caption">
                     {MAP_PRESET_LABELS[preset]}
-                    <small>{WORLD_SIZE_LABELS[PRESET_MAP_SIZES[preset]]} · {WORLD_TRAITS[preset]}</small>
+                    <small>{worldSizeLabel(preset)} · {worldTrait(preset)}</small>
                   </span>
                 </button>
               );
             }}
           </For>
         </div>
-        <button type="button" class="setup-arrow is-left" aria-label="Previous world" onClick={() => go(selected() - 1)}>◀</button>
-        <button type="button" class="setup-arrow is-right" aria-label="Next world" onClick={() => go(selected() + 1)}>▶</button>
+        <button type="button" class="setup-arrow is-left" aria-label="Previous world" onClick={() => deck.goBy(-1)}>◀</button>
+        <button type="button" class="setup-arrow is-right" aria-label="Next world" onClick={() => deck.goBy(1)}>▶</button>
       </section>
 
       <div class="setup-dots">
@@ -389,9 +326,9 @@ export const MenuScreen = (props: MenuScreenProps) => {
           {(preset, index) => (
             <button
               type="button"
-              class={index() === selected() ? 'is-active' : ''}
+              class={index() === deck.selected() ? 'is-active' : ''}
               aria-label={MAP_PRESET_LABELS[preset]}
-              onClick={() => go(index())}
+              onClick={() => deck.go(index())}
             >
               <i />
             </button>

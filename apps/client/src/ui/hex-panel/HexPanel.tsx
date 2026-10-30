@@ -1,5 +1,3 @@
-
-
 import './HexPanel.css';
 import { createSignal, Show } from 'solid-js';
 import { ownerCss } from '../../render/theme';
@@ -7,44 +5,22 @@ import { buildingLabel, terrainLabel } from '../text';
 import type { HexPanelProps } from './HexPanel.types';
 import { Bar } from '@the-big-war/frontend/ui/bar/Bar';
 import { Panel } from '@the-big-war/frontend/ui/panel/Panel';
+import { gameStore, live } from '../../game/store/store.service';
 import { hasUnlock } from '../../game/research/research.service';
-import type { Building } from '../../game/building/building.types';
-import { isMannedMachineGun } from '../../game/trench/trench.service';
 import { boatsFrom, portBoatLimit } from '../../game/ship/ship.service';
 import { RESEARCH_BY_ID } from '../../game/research/research.constants';
-import type { ModifierLine } from '../../game/offensive/offensive.types';
-import { gameStore, live, whenSettled } from '../../game/store/store.service';
-import { distance, gridAt, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { distance, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { barracksTier, nextBarracksTier, portUpgradeCost, upgradeError } from '../../game/building/building.service';
+import {
+  attackFrom as findAttackFrom,
+  buildingState,
+  machineGunStatus as machineGunState,
+  ownNeighbourCount,
+  romanLevel,
+  trenchTargets as countTrenchTargets,
+} from './HexPanel.utility';
 
 export type { HexPanelProps };
-
-const ROMAN = ['I', 'II', 'III'];
-
-function buildingState(building: Building): string {
-  const store = gameStore();
-  const parts: string[] = [building.kind === 'barracks' ? `L${ROMAN[building.level - 1] ?? building.level}` : `L${building.level}`];
-  if (building.kind === 'barracks') parts.push(barracksTier(store.state, building).troop);
-  if (building.kind === 'cannon' && building.cooldown > 0) {
-    parts.push(`Reloading ${building.cooldown.toFixed(0)}s`);
-  }
-  if (building.kind === 'trench' || building.kind === 'city') parts.push(`${Math.floor(building.garrison)} troops`);
-  if (building.machineGun) parts.push('MG');
-  if (building.kind === 'farm') parts.push(`+${Math.round(building.growth * 100)}%`);
-  if (building.demolishAt !== null) parts.push('Demolish');
-  return parts.join(' · ');
-}
-
-function modifierSummary(lines: readonly ModifierLine[]): string[] {
-  return lines
-    .filter(line => line.attack !== 1 || line.defence !== 1)
-    .map(
-      line =>
-        `${line.label}: ${line.attack !== 1 ? `×${line.attack.toFixed(2)} atk` : ''}${
-          line.attack !== 1 && line.defence !== 1 ? ' · ' : ''
-        }${line.defence !== 1 ? `×${line.defence.toFixed(2)} def` : ''}`,
-    );
-}
 
 export const HexPanel = (props: HexPanelProps) => {
   const store = gameStore();
@@ -65,14 +41,10 @@ export const HexPanel = (props: HexPanelProps) => {
     const current = cell();
     return current && current.owner >= 0 ? store.state.empires[current.owner] : null;
   };
-  
+
   const attackFrom = () => {
     const selected = hex();
-    if (!selected) return null;
-    for (const candidate of neighbors(selected)) {
-      if (gridAt(store.state.grid, candidate)?.owner === player()) return candidate;
-    }
-    return null;
+    return selected ? findAttackFrom(store.state, selected, player()) : null;
   };
 
   const building = () => cell()?.building ?? null;
@@ -97,9 +69,7 @@ export const HexPanel = (props: HexPanelProps) => {
   const upgrade = () => {
     const selected = hex();
     if (!selected) return;
-    whenSettled(store.dispatch({ type: 'UpgradeBuilding', empire: player(), hex: selected }), result => {
-      if (!result.ok) props.controllers.notice(result.reason);
-    });
+    props.controllers.run({ type: 'UpgradeBuilding', empire: player(), hex: selected });
   };
 
   const ownPort = live(() => {
@@ -109,15 +79,13 @@ export const HexPanel = (props: HexPanelProps) => {
   const buildShip = () => {
     const selected = hex();
     if (!selected) return;
-    whenSettled(store.dispatch({ type: 'BuildShip', empire: player(), hex: selected }), result => {
-      if (!result.ok) props.controllers.notice(result.reason);
-    });
+    props.controllers.run({ type: 'BuildShip', empire: player(), hex: selected });
   };
 
   const demolish = () => {
     const selected = hex();
     if (!selected) return;
-    store.dispatch({ type: 'DemolishBuilding', empire: player(), hex: selected });
+    props.controllers.run({ type: 'DemolishBuilding', empire: player(), hex: selected });
     setConfirmDemolish(false);
   };
 
@@ -134,23 +102,16 @@ export const HexPanel = (props: HexPanelProps) => {
   };
   const machineGunStatus = () => {
     const current = cell();
-    if (!current?.building?.machineGun) return 'None';
-    return isMannedMachineGun(current) ? 'Manned' : 'Unmanned';
+    return current ? machineGunState(current) : 'None';
   };
   const trenchTargets = () => {
     const selected = hex();
-    if (!selected) return 0;
-    return neighbors(selected).filter(candidate => {
-      const owner = gridAt(store.state.grid, candidate)?.owner;
-      return owner !== undefined && owner >= 0 && owner !== player();
-    }).length;
+    return selected ? countTrenchTargets(store.state, selected, player()) : 0;
   };
   const orderTrench = (type: 'ManTrench' | 'LeaveTrench', percent: number) => {
     const selected = hex();
     if (!selected) return;
-    whenSettled(store.dispatch({ type, empire: player(), hex: selected, percent }), result => {
-      if (!result.ok) props.controllers.notice(result.reason);
-    });
+    props.controllers.run({ type, empire: player(), hex: selected, percent });
   };
   const startTrenchAttack = () => {
     const selected = hex();
@@ -161,9 +122,7 @@ export const HexPanel = (props: HexPanelProps) => {
 
   const ownNeighbours = () => {
     const selected = hex();
-    if (!selected) return 0;
-    return neighbors(selected).filter(candidate => gridAt(store.state.grid, candidate)?.owner === player())
-      .length;
+    return selected ? ownNeighbourCount(store.state, selected, player()) : 0;
   };
 
   return (
@@ -194,7 +153,7 @@ export const HexPanel = (props: HexPanelProps) => {
                 <div class="kit-col">
                   <div class="kit-row">
                     <strong class="hud-card-name">{buildingLabel(entry().kind)}</strong>
-                    <span class="street-drawer-panel-kind">{buildingState(liveBuilding() ?? entry())}</span>
+                    <span class="street-drawer-panel-kind">{buildingState(store.state, liveBuilding() ?? entry())}</span>
                   </div>
                   <Show when={isOwn()}>
                     <div class="kit-row">
@@ -226,7 +185,7 @@ export const HexPanel = (props: HexPanelProps) => {
                       {tier => (
                         <div class="kit-col">
                           <button type="button" class="kit-button" disabled={upgradeBlocker() !== null} onClick={upgrade}>
-                            Upgrade to {ROMAN[liveBuilding()?.level ?? 0]} ({tier().troop}) · {tier().upgradeCost} Gold
+                            Upgrade to {romanLevel((liveBuilding()?.level ?? 0) + 1)} ({tier().troop}) · {tier().upgradeCost} Gold
                           </button>
                           <Show when={upgradeBlocker() === 'not_researched' && tier().requiresResearch}>
                             {nodeId => (
@@ -350,5 +309,3 @@ export const HexPanel = (props: HexPanelProps) => {
     </Panel>
   );
 };
-
-export { modifierSummary };

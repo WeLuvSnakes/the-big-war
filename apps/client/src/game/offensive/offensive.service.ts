@@ -174,6 +174,14 @@ export function endOffensivesBetween(state: GameState, a: EmpireId, b: EmpireId)
   }
 }
 
+export function offensivesOf(state: GameState, empire: EmpireId): Offensive[] {
+  return state.offensives.filter(offensive => offensive.empire === empire);
+}
+
+export function offensivesAgainst(state: GameState, empire: EmpireId): Offensive[] {
+  return state.offensives.filter(offensive => offensive.target === empire);
+}
+
 export function troopsCommittedAgainst(state: GameState, attacker: EmpireId, defender: EmpireId): number {
   let total = 0;
   for (const offensive of state.offensives) {

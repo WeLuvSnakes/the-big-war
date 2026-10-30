@@ -6,24 +6,11 @@ import { gameStore, live } from '../../game/store/store.service';
 import { RESEARCH_NODES } from '../../game/research/research.constants';
 import { signed, signedPercent } from '@the-big-war/frontend/ui/format/format';
 import type { Modifier, ModifierKey } from '../../game/modifier/modifier.types';
-import { isComplete, missingRequirements } from '../../game/research/research.service';
 import type { ResearchBranch, ResearchEffect, ResearchNode } from '../../game/research/research.types';
+import { RESEARCH_BRANCHES, branchLabel, researchNodes, researchSecondsLeft, researchStatus } from './ResearchPanel.utility';
 import { FaArrowUp, FaBolt, FaChevronRight, FaCheck, FaCrosshairs, FaFlag, FaHammer, FaHeart, FaAtom, FaShieldAlt, FaUnlock, FaUsers, FaVial, FaWallet } from '@the-big-war/frontend/ui/icons/icons';
 
 export type { ResearchPanelProps };
-
-const BRANCHES: readonly ResearchBranch[] = ['economy', 'military', 'territory'];
-
-const branchLabel = (branch: ResearchBranch): string => {
-  switch (branch) {
-    case 'economy':
-      return 'Economy';
-    case 'military':
-      return 'Military';
-    case 'territory':
-      return 'Territory';
-  }
-};
 
 const MODIFIER_META: Record<ModifierKey, { readonly icon: typeof FaWallet; readonly label: string }> = {
   goldIncome: { icon: FaWallet, label: 'Gold income' },
@@ -74,27 +61,6 @@ const EffectChips = (props: { readonly effect: ResearchEffect }) => {
   }
 };
 
-function chainOrder(nodes: readonly ResearchNode[]): { node: ResearchNode; chain: number }[] {
-  const ids = new Set(nodes.map(node => node.id));
-  const ordered: { node: ResearchNode; chain: number }[] = [];
-  const seen = new Set<string>();
-  let chain = 0;
-  const visit = (node: ResearchNode) => {
-    if (seen.has(node.id)) return;
-    if (node.requires.some(req => ids.has(req) && !seen.has(req))) return;
-    seen.add(node.id);
-    ordered.push({ node, chain });
-    for (const child of nodes) if (child.requires.includes(node.id)) visit(child);
-  };
-  for (const node of nodes) {
-    if (seen.has(node.id)) continue;
-    visit(node);
-    chain++;
-  }
-  for (const node of nodes) if (!seen.has(node.id)) ordered.push({ node, chain: chain++ });
-  return ordered;
-}
-
 const ScienceCost = (props: { readonly amount: number }) => (
   <span class="research-cost kit-num" title="Science">
     <FaVial class="research-cost-icon" />
@@ -116,33 +82,9 @@ export const ResearchPanel = (props: ResearchPanelProps) => {
   const me = live(() => store.state.empires[store.state.playerEmpire]!);
   const research = () => me().research;
 
-  const status = (node: ResearchNode): 'done' | 'active' | 'available' | 'locked' => {
-    if (isComplete(research(), node.id)) return 'done';
-    if (research().active?.nodeId === node.id) return 'active';
-    if (missingRequirements(research(), node).length > 0) return 'locked';
-    return 'available';
-  };
-
-  const STATUS_ORDER = { active: 0, available: 1, locked: 2, done: 3 } as const;
-  const nodes = (branch: ResearchBranch) => {
-    const visible = chainOrder(RESEARCH_NODES.filter(node => node.branch === branch))
-      .filter(entry => status(entry.node) !== 'locked')
-      .map((entry, index) => ({
-        ...entry,
-        index,
-        rank: STATUS_ORDER[status(entry.node)],
-      }));
-    const chainRank = new Map<number, number>();
-    for (const entry of visible) {
-      chainRank.set(entry.chain, Math.min(chainRank.get(entry.chain) ?? Infinity, entry.rank));
-    }
-    return visible
-      .sort((a, b) => chainRank.get(a.chain)! - chainRank.get(b.chain)! || a.index - b.index)
-      .map(entry => entry.node);
-  };
-
-  const secondsLeft = (node: ResearchNode): number =>
-    Math.ceil((1 - (research().active?.progress ?? 0)) * node.duration);
+  const status = (node: ResearchNode) => researchStatus(research(), node);
+  const nodes = (branch: ResearchBranch) => researchNodes(branch, research());
+  const secondsLeft = (node: ResearchNode) => researchSecondsLeft(research(), node);
 
   const start = (node: ResearchNode, optionId?: string) => {
     store.dispatch({
@@ -176,7 +118,7 @@ export const ResearchPanel = (props: ResearchPanelProps) => {
         }}
       </Show>
 
-      <For each={BRANCHES}>
+      <For each={RESEARCH_BRANCHES}>
         {entry => (
           <div class={`research-branch${isOpen(entry) ? ' is-open' : ''}`}>
             <button

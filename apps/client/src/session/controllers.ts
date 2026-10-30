@@ -10,9 +10,9 @@ import type { EmpireId } from '../game/empire/empire.types';
 import { isNavigable } from '../game/ship/sea-route.service';
 import { shipById, shipsNear } from '../game/ship/ship.service';
 import type { BuildingKind } from '../game/building/building.types';
-import type { CommandError } from '../game/commands/commands.types';
 import type { OffensiveId } from '../game/offensive/offensive.types';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
+import type { Command, CommandError, CommandResult } from '../game/commands/commands.types';
 import type {
   CommandNotice,
   ControllerDeps,
@@ -65,6 +65,16 @@ export function createControllers(deps: ControllerDeps): Controllers {
     setNotices(current => current.filter(item => item.id !== id));
   };
 
+  const run = (command: Command, onDone?: (result: CommandResult) => void): void => {
+    whenSettled(store.dispatch(command), result => {
+      if (!result.ok) {
+        notice(result.reason);
+        return;
+      }
+      onDone?.(result);
+    });
+  };
+
   const hexAtScreen = (at: Pixel): Axial | null => deps.screenToHex(at);
 
   const own = (hex: Axial): boolean => gridAt(state().grid, hex)?.owner === player();
@@ -74,29 +84,19 @@ export function createControllers(deps: ControllerDeps): Controllers {
   };
 
   const sendTroops = (target: Axial) => {
-    whenSettled(store.dispatch({ type: 'SendTroops', empire: player(), target, percent: troopPercent() }), result => {
-      if (result.ok) deps.onTroopsSent?.(target);
-      else notice(result.reason);
-    });
+    run({ type: 'SendTroops', empire: player(), target, percent: troopPercent() }, () => deps.onTroopsSent?.(target));
   };
 
   const orderOffensive = (offensive: OffensiveId, target: Axial) => {
-    whenSettled(store.dispatch({ type: 'OrderOffensive', empire: player(), offensive, target }), result => {
-      if (!result.ok) notice(result.reason);
-    });
+    run({ type: 'OrderOffensive', empire: player(), offensive, target });
   };
 
   const placeBuilding = (hex: Axial, building: BuildingKind) => {
-    whenSettled(store.dispatch({ type: 'PlaceBuilding', empire: player(), hex, kind: building }), result => {
-      if (!result.ok) notice(result.reason);
-    });
+    run({ type: 'PlaceBuilding', empire: player(), hex, kind: building });
   };
 
   const fireCannon = (from: Axial, target: Axial) => {
-    whenSettled(store.dispatch({ type: 'FireCannon', empire: player(), from, target }), result => {
-      if (result.ok) setToolSignal({ kind: 'idle' });
-      else notice(result.reason);
-    });
+    run({ type: 'FireCannon', empire: player(), from, target }, () => setToolSignal({ kind: 'idle' }));
   };
 
   const trenchAttack = (from: Axial, target: Axial) => {
@@ -104,11 +104,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
       notice('invalid_target');
       return;
     }
-    whenSettled(store.dispatch({ type: 'TrenchAttack', empire: player(), hex: from, target, percent: troopPercent() }), result => {
-      if (!result.ok) {
-        notice(result.reason);
-        return;
-      }
+    run({ type: 'TrenchAttack', empire: player(), hex: from, target, percent: troopPercent() }, () => {
       deps.onTroopsSent?.(target);
       setTool({ kind: 'idle' });
     });
@@ -128,10 +124,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
     setSelectedShip(null);
     if (!shipById(state(), selected)) return false;
     if (!isNavigable(state().map, gridIndex(state().grid, hex.q, hex.r))) return false;
-    whenSettled(store.dispatch({ type: 'OrderShip', empire: player(), ship: selected, target: hex }), result => {
-      if (result.ok) setSelectedShip(selected);
-      else notice(result.reason);
-    });
+    run({ type: 'OrderShip', empire: player(), ship: selected, target: hex }, () => setSelectedShip(selected));
     return true;
   };
 
@@ -245,6 +238,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
     },
     secondary,
     key,
+    run,
     notice,
     dismissNotice,
   };

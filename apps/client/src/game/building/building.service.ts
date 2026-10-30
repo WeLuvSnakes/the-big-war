@@ -9,9 +9,9 @@ import type { Empire, EmpireId } from '../empire/empire.types';
 import type { BarracksTierConfig } from '../config/config.types';
 import { ENGINE_TUNING } from '../simulation/simulation.constants';
 import { hasUnlock, isComplete } from '../research/research.service';
+import type { Building, BuildingKind, OwnedBuilding } from './building.types';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
-import type { Building, BuildingId, BuildingKind, OwnedBuilding } from './building.types';
 import { area, gridAt, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { CLEARS_TERRAIN, ENCAMPMENT_BUILDINGS, FLAT_COST_BUILDINGS, PRODUCTION_BUILDINGS } from './building.constants';
 
@@ -49,8 +49,10 @@ export function buildingCost(state: GameState, empireId: EmpireId, kind: Buildin
   return empire ? resolveModifier(base, empire.bonuses.buildCost) : base;
 }
 
-export function buildingIdAt(state: GameState, hex: Axial): BuildingId | null {
-  return gridAt(state.grid, hex)?.building?.id ?? null;
+export function isBuildingUnlocked(state: GameState, empireId: EmpireId, kind: BuildingKind): boolean {
+  const empire = state.empires[empireId];
+  if (!empire) return false;
+  return state.config.buildings[kind].requiresResearch === null || hasUnlock(empire, `building:${kind}`);
 }
 
 export function ownedBuildings(state: GameState, empireId: EmpireId): OwnedBuilding[] {
@@ -60,15 +62,6 @@ export function ownedBuildings(state: GameState, empireId: EmpireId): OwnedBuild
     out.push({ hex: { q: cell.q, r: cell.r }, cell, building: cell.building });
   }
   return out;
-}
-
-export function countBuildingsOfKind(state: GameState, empireId: EmpireId, kind: BuildingKind): number {
-  let count = 0;
-  for (const cell of buildingCellsOf(state, empireId)) {
-    if (!cell.building || cell.building.buildRemaining > 0) continue;
-    if (kind === 'machine_gun' ? cell.building.machineGun : cell.building.kind === kind) count += 1;
-  }
-  return count;
 }
 
 function countPlacedOfKind(state: GameState, empireId: EmpireId, kind: BuildingKind): number {

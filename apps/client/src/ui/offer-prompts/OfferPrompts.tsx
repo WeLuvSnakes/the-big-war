@@ -1,12 +1,12 @@
 import './OfferPrompts.css';
-import { For } from 'solid-js';
+import { Index } from 'solid-js';
 import { factionIcon } from '../text';
 import { ownerCss } from '../../render/theme';
 import type { OfferPromptsProps } from './OfferPrompts.types';
 import { FaCheck, FaTimes } from '@the-big-war/frontend/ui/icons/icons';
 import { pendingOffersTo } from '../../game/diplomacy/diplomacy.service';
 import type { PendingOffer } from '../../game/diplomacy/diplomacy.types';
-import { gameStore, live as tracked, whenSettled } from '../../game/store/store.service';
+import { gameStore, live as tracked } from '../../game/store/store.service';
 
 export type { OfferPromptsProps };
 
@@ -16,34 +16,32 @@ export const OfferPrompts = (props: OfferPromptsProps) => {
   const offers = () => pendingOffersTo(live(), live().playerEmpire);
 
   const respond = (offer: PendingOffer, accept: boolean) => {
-    whenSettled(store.dispatch({ type: 'RespondOffer', empire: offer.to, from: offer.from, accept }), result => {
-      if (!result.ok) props.controllers?.notice(result.reason);
-    });
+    props.controllers?.run({ type: 'RespondOffer', empire: offer.to, from: offer.from, accept });
   };
 
   return (
     <div class="offer-prompts" aria-live="polite">
-      <For each={offers()}>
+      <Index each={offers()}>
         {offer => {
-          const empire = () => live().empires[offer.from];
-          const secondsLeft = () => Math.max(0, Math.ceil(offer.expiresAt - live().elapsed));
+          const empire = () => live().empires[offer().from];
+          const secondsLeft = () => Math.max(0, Math.ceil(offer().expiresAt - live().elapsed));
           return (
-            <div class="offer-prompt" style={{ '--tint': ownerCss(offer.from) }}>
+            <div class="offer-prompt" style={{ '--tint': ownerCss(offer().from) }}>
               <span class="offer-prompt-flag">{factionIcon(empire()?.factionId ?? '')}</span>
               <span class="offer-prompt-text">
                 <strong>{empire()?.name}</strong> offers peace
               </span>
               <span class="offer-prompt-timer kit-num">{secondsLeft()}s</span>
-              <button type="button" class="offer-prompt-action is-good" onClick={() => respond(offer, true)}>
+              <button type="button" class="offer-prompt-action is-good" onClick={() => respond(offer(), true)}>
                 <FaCheck /> Accept
               </button>
-              <button type="button" class="offer-prompt-action is-bad" onClick={() => respond(offer, false)}>
+              <button type="button" class="offer-prompt-action is-bad" onClick={() => respond(offer(), false)}>
                 <FaTimes /> Decline
               </button>
             </div>
           );
         }}
-      </For>
+      </Index>
     </div>
   );
 };

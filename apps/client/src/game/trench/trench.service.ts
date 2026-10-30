@@ -18,12 +18,6 @@ export function garrisonRoom(state: GameState, building: Building): number {
   return Math.max(0, state.config.trench.capacity - building.garrison);
 }
 
-export function addToGarrison(state: GameState, building: Building, troops: number): number {
-  const moved = Math.min(troops, garrisonRoom(state, building));
-  building.garrison += moved;
-  return troops - moved;
-}
-
 export function isMannedMachineGun(cell: HexCell): boolean {
   const building = cell.building;
   if (!building || building.kind !== 'trench' || !building.machineGun || building.buildRemaining > 0) return false;
