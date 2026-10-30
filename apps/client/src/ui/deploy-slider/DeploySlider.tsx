@@ -38,7 +38,6 @@ export const DeploySlider = (props: DeploySliderProps) => {
             onClick={() => props.onReset()}
           >
             <FaUndo />
-            <span>Reset view</span>
           </button>
         </div>
       </Show>

@@ -19,14 +19,10 @@
 }
 
 .street-tray .deploy-slider-reset {
-  gap: 5px;
   height: 22px;
   padding: 0 8px;
   width: auto;
   color: var(--street-text);
-  font-size: 12px;
-  text-shadow: var(--street-text-shadow);
-  white-space: nowrap;
 }
 
 .street-tray .deploy-slider-reset:hover:not(:disabled) {
