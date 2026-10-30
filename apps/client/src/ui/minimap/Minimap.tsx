@@ -1,7 +1,7 @@
 import './Minimap.css';
+import { onCleanup, onMount } from 'solid-js';
 import type { MinimapProps } from './Minimap.types';
 import { gameStore } from '../../game/store/store.service';
-import { createEffect, onCleanup, onMount } from 'solid-js';
 import { NEUTRAL_COLOR, ownerColor } from '../../render/theme';
 
 export type { MinimapProps };
@@ -35,10 +35,6 @@ export const Minimap = (props: MinimapProps = {}) => {
     draw();
     const timer = setInterval(draw, props.refreshMs ?? 1000);
     onCleanup(() => clearInterval(timer));
-  });
-  createEffect(() => {
-    store.state.status;
-    draw();
   });
 
   return (
