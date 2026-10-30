@@ -106,7 +106,6 @@ export interface WaveConfig {
   readonly baseTilesPerSecond: number;
   readonly tilesPerRootTroop: number;
 
-  readonly neutralTroopsPerTile: number;
   readonly minTroopsPerTile: number;
   readonly densityWeight: number;
   readonly defenderLossShare: number;

@@ -58,7 +58,6 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
     tilesPerRootTroop: 0.2,
     marchSecondsPerHex: 1,
     maxMarchSeconds: 60,
-    neutralTroopsPerTile: 0.15,
     minTroopsPerTile: 0.3,
     densityWeight: 1,
     defenderLossShare: 0.4,

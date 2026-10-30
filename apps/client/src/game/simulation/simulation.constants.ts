@@ -16,7 +16,6 @@ export const ENGINE_TUNING = {
   buildSlotsPerEmpire: 1,
   progressEpsilon: 1e-9,
 
-  mountainClaimSoldiers: 5,
   mountainClaimSeconds: 4,
 
   waveFocusPull: 1.5,
