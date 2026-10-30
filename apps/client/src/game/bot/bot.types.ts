@@ -13,6 +13,22 @@ export interface Bot {
   readonly personality: BotPersonality;
 
   readonly rng: Rng;
+
+  clock: number;
+  readonly alarms: Map<number, BotAlarm>;
+  readonly cooldowns: Map<string, number>;
+  pendingHold: PendingHold | null;
+}
+
+export interface BotAlarm {
+  readonly since: number;
+  readonly delay: number;
+}
+
+export interface PendingHold {
+  readonly spot: Axial;
+  readonly known: ReadonlySet<number>;
+  readonly expires: number;
 }
 
 export interface BotOptions {
