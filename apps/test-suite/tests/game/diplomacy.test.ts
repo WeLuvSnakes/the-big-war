@@ -1,3 +1,4 @@
+import { testEmpire } from '../support/fixture';
 import { describe, expect, test } from 'bun:test';
 import { createRng } from '@the-big-war/game-engine/rng/rng.service';
 import type { Empire } from '@the-big-war/client/game/empire/empire.types';
@@ -7,7 +8,6 @@ import type { GameConfig } from '@the-big-war/client/game/config/config.types';
 import type { HexCell, HexGrid } from '@the-big-war/client/game/map/map.types';
 import { makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
-import { emptyModifierTotals } from '@the-big-war/client/game/modifier/modifier.service';
 import { acceptsOffer, agreePeace, declareWar, expireOffers, getRelation, isProtected, offerCooldown, pendingOffer, relationKey } from '@the-big-war/client/game/diplomacy/diplomacy.service';
 
 function createTestState(configOverrides: Partial<GameConfig> = {}): GameState {
@@ -28,28 +28,7 @@ function createTestState(configOverrides: Partial<GameConfig> = {}): GameState {
 
   const empires: Empire[] = [];
   for (let id = 0; id < config.start.empireCount; id++) {
-    empires.push({
-      id,
-      name: `Empire ${id}`,
-      factionId: 'ironclad',
-      isHuman: id === 0,
-      neutralState: false,
-      colorIndex: id,
-      gold: 500,
-      science: 500,
-      civilians: 50,
-      civilianBalance: 0,
-      troopBalance: 0,
-      soldiers: 100,
-      reserveCap: 200,
-      drafting: false,
-      bonuses: emptyModifierTotals(),
-      research: { completed: [], chosen: {}, active: null },
-      unlocks: [],
-      hexCount: 0,
-      alive: true,
-      eliminatedAt: null,
-    });
+    empires.push(testEmpire({ id, factionId: 'ironclad', gold: 500, science: 500, civilians: 50, soldiers: 100, reserveCap: 200 }));
   }
 
   for (const cell of grid.cells) {

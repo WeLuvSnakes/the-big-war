@@ -1,3 +1,4 @@
+import { testEmpire, clearStaging } from '../support/fixture';
 
 
 import { describe, expect, test } from 'bun:test';
@@ -12,7 +13,6 @@ import type { Command } from '@the-big-war/client/game/commands/commands.types';
 import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants';
 import { completeResearch } from '@the-big-war/client/game/research/research.service';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
-import { emptyModifierTotals } from '@the-big-war/client/game/modifier/modifier.service';
 import { stepColumns } from '@the-big-war/client/game/simulation/systems/columns.system';
 import { gridAt, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { stepBuildings } from '@the-big-war/client/game/simulation/systems/buildings.system';
@@ -40,28 +40,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
   }));
   const empires: Empire[] = [];
   for (let id = 0; id < config.start.empireCount; id++) {
-    empires.push({
-      id,
-      name: `Empire ${id}`,
-      factionId: FACTION_IDS[id % FACTION_IDS.length]!,
-      isHuman: id === 0,
-      neutralState: false,
-      colorIndex: id,
-      gold: 1000,
-      science: 1000,
-      civilians: 100,
-      civilianBalance: 0,
-      troopBalance: 0,
-      soldiers: 100,
-      reserveCap: 500,
-      drafting: false,
-      bonuses: emptyModifierTotals(),
-      research: { completed: [], chosen: {}, active: null },
-      unlocks: [],
-      hexCount: 0,
-      alive: true,
-      eliminatedAt: null,
-    });
+    empires.push(testEmpire({ id, factionId: FACTION_IDS[id % FACTION_IDS.length]!, gold: 1000, science: 1000, civilians: 100, soldiers: 100, reserveCap: 500 }));
   }
   const state: GameState = {
     config,
@@ -110,6 +89,7 @@ function borderEdge(state: GameState, left: number, right: number): { a: { q: nu
 describe('SendTroops', () => {
   test('commits troops from the reserve onto a new front', () => {
     const state = makeState();
+    clearStaging(state);
     const edge = borderEdge(state, 0, 1);
     const result = dispatch(state, {
       type: 'SendTroops',
@@ -240,6 +220,7 @@ describe('SendTroops', () => {
 
   test('joining an existing front adds to the same side', () => {
     const state = makeState();
+    clearStaging(state);
     const edge = borderEdge(state, 0, 1);
     const send = (percent: number): void => {
       dispatch(state, { type: 'SendTroops', empire: 0, hex: edge.a, target: edge.b, percent, intent: 'attack' });
@@ -254,6 +235,7 @@ describe('SendTroops', () => {
 describe('SetFrontMode', () => {
   test('switches the mode of the empire\u2019s own side', () => {
     const state = makeState();
+    clearStaging(state);
     const edge = borderEdge(state, 0, 1);
     dispatch(state, { type: 'SendTroops', empire: 0, hex: edge.a, target: edge.b, percent: 50, intent: 'attack' });
     const front = state.fronts[0]!;
@@ -264,6 +246,7 @@ describe('SetFrontMode', () => {
 
   test('rejects a front the empire is not part of', () => {
     const state = makeState();
+    clearStaging(state);
     const edge = borderEdge(state, 0, 1);
     dispatch(state, { type: 'SendTroops', empire: 0, hex: edge.a, target: edge.b, percent: 50, intent: 'attack' });
     const front = state.fronts[0]!;
@@ -547,6 +530,7 @@ describe('DemolishBuilding', () => {
 describe('FireCannon', () => {
   test('fires within range, starts the cooldown, and damages both sides', () => {
     const state = makeState();
+    clearStaging(state);
     const edge = borderEdge(state, 0, 1);
     
     const cannonHex = { q: edge.a.q - 1, r: edge.a.r };
@@ -749,5 +733,20 @@ describe('speed, pause and log helpers', () => {
     emit({ type: 'SetFrontMode', empire: 0, frontId: 'x', mode: 'attack' });
     
     expect(reasons.size).toBeGreaterThan(0);
+  });
+});
+
+describe('RetreatFront', () => {
+  test('rejects an eliminated empire', () => {
+    const state = makeState();
+    clearStaging(state);
+    const edge = borderEdge(state, 0, 1);
+    dispatch(state, { type: 'SendTroops', empire: 0, hex: edge.a, target: edge.b, percent: 50, intent: 'attack' });
+    const front = state.fronts[0]!;
+    state.empires[0]!.alive = false;
+    const result = dispatch(state, { type: 'RetreatFront', empire: 0, frontId: front.id });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('no_empire');
+    expect(front.sideA.troops).toBeGreaterThan(0);
   });
 });

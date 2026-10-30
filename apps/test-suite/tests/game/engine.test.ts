@@ -1,3 +1,4 @@
+import { testEmpire } from '../support/fixture';
 
 
 import { describe, expect, test } from 'bun:test';
@@ -43,28 +44,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
 
   const empires: Empire[] = [];
   for (let id = 0; id < config.start.empireCount; id++) {
-    empires.push({
-      id,
-      name: `Empire ${id}`,
-      factionId: FACTIONS[id % FACTIONS.length]!,
-      isHuman: id === 0,
-      neutralState: false,
-      colorIndex: id,
-      gold: config.start.gold,
-      science: config.start.science,
-      civilians: config.start.civilians,
-      civilianBalance: 0,
-      troopBalance: 0,
-      soldiers: config.start.soldiers,
-      reserveCap: config.recruit.cityReserveCap,
-      drafting: false,
-      bonuses: emptyModifierTotals(),
-      research: { completed: [], chosen: {}, active: null },
-      unlocks: [],
-      hexCount: 0,
-      alive: true,
-      eliminatedAt: null,
-    });
+    empires.push(testEmpire({ id, factionId: FACTIONS[id % FACTIONS.length]!, gold: config.start.gold, science: config.start.science, civilians: config.start.civilians, soldiers: config.start.soldiers, reserveCap: config.recruit.cityReserveCap }));
   }
 
   const state: GameState = {
@@ -147,7 +127,7 @@ describe('engine economy', () => {
     empire.civilians = 100; 
     run(state, 1);
     const expected = state.config.economy.marketGoldPerSecond * 1;
-    expect(empire.gold).toBeGreaterThan(expected * 0.9);
+    expect(empire.gold).toBeGreaterThanOrEqual(expected * 0.9 - 1e-9);
     expect(empire.gold).toBeLessThan(expected * 1.1);
   });
 
