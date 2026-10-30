@@ -196,12 +196,6 @@ export const Shell = () => {
       <Show when={showingMatch()}>
         <Hud controllers={runtime()?.controllers} />
 
-        <Show when={runtime()?.choosingSpawn()}>
-          <div class="spawn-bar" role="status">
-            <span>Click land to claim your first 4x4 and start the war</span>
-          </div>
-        </Show>
-
         <Rail
           label="The Big War"
           brand={<img src="/images/swords.svg" alt="" draggable={false} />}
@@ -310,4 +304,3 @@ const Notices = (props: NoticesProps) => (
     </For>
   </div>
 );
-
