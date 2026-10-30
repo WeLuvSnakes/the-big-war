@@ -47,6 +47,13 @@ export interface RecallOffensiveCommand {
   readonly offensive: OffensiveId;
 }
 
+export interface OrderOffensiveCommand {
+  readonly type: 'OrderOffensive';
+  readonly empire: EmpireId;
+  readonly offensive: OffensiveId;
+  readonly target: Axial;
+}
+
 export interface PlaceBuildingCommand {
   readonly type: 'PlaceBuilding';
   readonly empire: EmpireId;
@@ -165,6 +172,7 @@ export interface RespondOfferCommand {
 export type Command =
   | SendTroopsCommand
   | RecallOffensiveCommand
+  | OrderOffensiveCommand
   | PlaceBuildingCommand
   | DemolishBuildingCommand
   | UpgradeBuildingCommand

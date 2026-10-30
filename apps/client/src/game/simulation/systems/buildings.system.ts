@@ -1,9 +1,9 @@
 import { ENGINE_TUNING } from '../simulation.constants';
 import type { GameState } from '../../state/state.types';
 import type { EmpireId } from '../../empire/empire.types';
-import { returnToReserve } from '../../troops/troops.service';
 import type { Building } from '../../building/building.types';
 import { crewConstruction, stepWalkers } from './walkers.system';
+import { returnToReserve, takeGarrison } from '../../troops/troops.service';
 import { allBuildingCells, buildingCellsOf, setBuilding } from '../../map/world-index.service';
 
 export function stepBuildings(state: GameState, dt: number): void {
@@ -26,8 +26,9 @@ export function removeDemolishedBuildings(state: GameState): void {
     const building = cell.building;
     if (!building || building.demolishAt === null) continue;
     if (building.demolishAt > state.elapsed) continue;
-    if (building.garrison > 0) returnToReserve(state, cell.owner, building.garrison);
+    const troops = takeGarrison(state, cell);
     setBuilding(state, cell, null);
+    returnToReserve(state, cell.owner, troops);
   }
 }
 

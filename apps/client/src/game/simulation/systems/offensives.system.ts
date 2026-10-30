@@ -8,9 +8,18 @@ import { lerp } from '@the-big-war/game-engine/math/math.service';
 import { setBuilding, setOwner } from '../../map/world-index.service';
 import { heapPop } from '@the-big-war/game-engine/collections/min-heap.service';
 import { attackPowerAt, defencePowerAt } from '../../offensive/wave-power.service';
+import { addToEncampments, drawFromEncampments } from '../../troops/troops.service';
 import { gridAt, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import { canEnter, endOffensive, enqueueTile, removeOffensive } from '../../offensive/offensive.service';
 import { biomeDefenceAt, biomeSpeedAt, isPassable, terrainDefenceAt, tileScale } from '../../map/terrain.service';
+import {
+  canEnter,
+  defendersAt,
+  endOffensive,
+  enqueueTile,
+  isDefending,
+  removeOffensive,
+  seedFrontier,
+} from '../../offensive/offensive.service';
 
 export function stepOffensives(state: GameState, dt: number): void {
   for (const offensive of [...state.offensives]) {
@@ -19,12 +28,23 @@ export function stepOffensives(state: GameState, dt: number): void {
       removeOffensive(state, offensive);
       continue;
     }
+    if (offensive.mission !== 'attack') {
+      stepIdle(state, offensive, dt);
+      continue;
+    }
     if (offensive.target !== NEUTRAL_OWNER && !state.empires[offensive.target]?.alive) {
       endOffensive(state, offensive);
       continue;
     }
     advance(state, offensive, dt);
   }
+}
+
+function stepIdle(state: GameState, offensive: Offensive, dt: number): void {
+  if (stepMarch(offensive, dt) || offensive.mission !== 'retreat') return;
+  addToEncampments(state, offensive.empire, offensive.troops);
+  offensive.troops = 0;
+  removeOffensive(state, offensive);
 }
 
 function tilesPerSecond(state: GameState, offensive: Offensive): number {
@@ -41,25 +61,40 @@ function stepMarch(offensive: Offensive, dt: number): boolean {
   offensive.recent[0] = offensive.head;
   if (t < 1) return true;
   offensive.march = null;
-  offensive.recent.length = 0;
+  offensive.head = march.to;
+  offensive.recent[0] = march.to;
   return false;
 }
 
 function advance(state: GameState, offensive: Offensive, dt: number): void {
   if (stepMarch(offensive, dt)) return;
   offensive.budget += tilesPerSecond(state, offensive) * dt;
-  while (offensive.budget >= 1) {
+  const contested = offensive.target !== NEUTRAL_OWNER;
+  let assault = dt;
+  while (offensive.budget >= 1 || (contested && assault > 0)) {
     if (offensive.troops <= 0) {
       removeOffensive(state, offensive);
       return;
     }
-    const index = heapPop(offensive.frontier);
+    let index = offensive.captureTile ?? heapPop(offensive.frontier);
+    if (index === undefined) {
+      seedFrontier(state, offensive);
+      index = heapPop(offensive.frontier);
+    }
     if (index === undefined) {
       endOffensive(state, offensive);
       return;
     }
     const cell = state.grid.cells[index]!;
-    if (cell.owner !== offensive.target) continue;
+    if (cell.owner !== offensive.target) {
+      clearCapture(offensive);
+      continue;
+    }
+    if (contested) {
+      offensive.captureTile = index;
+      assault = assaultTile(state, offensive, cell, assault);
+      if (offensive.captureHealth! > 0 || offensive.budget < 1) break;
+    }
     offensive.budget -= tileEffort(state, cell);
     const cost = tileCost(state, offensive, cell);
     if (cost > offensive.troops) {
@@ -69,9 +104,45 @@ function advance(state: GameState, offensive: Offensive, dt: number): void {
     }
     offensive.troops -= cost;
     bleedDefender(state, offensive, cost);
+    clearCapture(offensive);
     takeTile(state, offensive, cell);
   }
+  offensive.budget = Math.min(1, offensive.budget);
   if (offensive.troops <= 0) removeOffensive(state, offensive);
+}
+
+function clearCapture(offensive: Offensive): void {
+  offensive.captureTile = undefined;
+  offensive.captureHealth = undefined;
+  offensive.captureHitAt = undefined;
+}
+
+function assaultTile(state: GameState, offensive: Offensive, cell: HexCell, seconds: number): number {
+  const { tileHealth, tileDamagePerTroop, tileHealSeconds } = state.config.wave;
+  const defenders = defendersAt(state, cell, offensive.empire);
+  const surplus = Math.max(0, offensive.troops - defenders);
+  const idle = state.elapsed - (offensive.captureHitAt ?? state.elapsed) > tileHealSeconds;
+  const health = surplus <= 0 || idle ? tileHealth : (offensive.captureHealth ?? tileHealth);
+  if (seconds > 0) offensive.captureHitAt = state.elapsed;
+  const damagePerSecond = surplus * tileDamagePerTroop;
+  const needed = damagePerSecond > 0 ? health / damagePerSecond : Number.POSITIVE_INFINITY;
+  const spent = Math.min(seconds, needed);
+  offensive.captureHealth = needed <= seconds ? 0 : health - damagePerSecond * seconds;
+  if (defenders > 0) fightDefenders(state, offensive, cell, defenders, spent);
+  return seconds - spent;
+}
+
+function fightDefenders(state: GameState, offensive: Offensive, cell: HexCell, defenders: number, seconds: number): void {
+  const { fightLossPerTroop, fightMinLossPerSecond } = state.config.wave;
+  const engaged = Math.min(offensive.troops, defenders);
+  const loss = Math.min(engaged, Math.max(fightMinLossPerSecond, engaged * fightLossPerTroop) * seconds);
+  offensive.troops = loss >= offensive.troops - ENGINE_TUNING.progressEpsilon ? 0 : offensive.troops - loss;
+  const remaining = 1 - loss / defenders;
+  for (const defending of [...state.offensives]) {
+    if (!isDefending(defending, cell, offensive.empire)) continue;
+    defending.troops *= remaining;
+    if (defending.troops <= ENGINE_TUNING.progressEpsilon) removeOffensive(state, defending);
+  }
 }
 
 function tileEffort(state: GameState, cell: HexCell): number {
@@ -97,9 +168,7 @@ function tileCost(state: GameState, offensive: Offensive, cell: HexCell): number
 }
 
 function bleedDefender(state: GameState, offensive: Offensive, spent: number): void {
-  const defender = state.empires[offensive.target];
-  if (!defender) return;
-  defender.soldiers = Math.max(0, defender.soldiers - spent * state.config.wave.defenderLossShare);
+  drawFromEncampments(state, offensive.target, offensive.head, spent * state.config.wave.defenderLossShare);
 }
 
 function takeTile(state: GameState, offensive: Offensive, cell: HexCell): void {

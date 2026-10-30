@@ -3,9 +3,9 @@ import { handleFireCannon } from './handlers/cannon.handler';
 import type { Command, CommandResult } from './commands.types';
 import { handleStartResearch } from './handlers/research.handler';
 import { handleBuildShip, handleOrderShip } from './handlers/ship.handler';
-import { handleRecallOffensive, handleSendTroops } from './handlers/troops.handler';
 import { createDispatcher } from '@the-big-war/game-engine/commands/command.service';
 import { handleLeaveTrench, handleManTrench, handleTrenchAttack } from './handlers/trench.handler';
+import { handleOrderOffensive, handleRecallOffensive, handleSendTroops } from './handlers/troops.handler';
 import {
   handleDeclareWar,
   handleOfferPeace,
@@ -22,6 +22,7 @@ export const dispatch = createDispatcher<GameState, Command, CommandResult>({
   ConfirmSpawn: handleConfirmSpawn,
   SendTroops: handleSendTroops,
   RecallOffensive: handleRecallOffensive,
+  OrderOffensive: handleOrderOffensive,
   PlaceBuilding: handlePlaceBuilding,
   DemolishBuilding: handleDemolishBuilding,
   UpgradeBuilding: handleUpgradeBuilding,

@@ -13,7 +13,7 @@ import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
 import type { Building, BuildingId, BuildingKind, OwnedBuilding } from './building.types';
 import { area, gridAt, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import { CLEARS_TERRAIN, FLAT_COST_BUILDINGS, PRODUCTION_BUILDINGS } from './building.constants';
+import { CLEARS_TERRAIN, ENCAMPMENT_BUILDINGS, FLAT_COST_BUILDINGS, PRODUCTION_BUILDINGS } from './building.constants';
 
 export function createBuilding(state: GameState, kind: BuildingKind, level: number, buildRemaining: number): Building {
   return {
@@ -34,6 +34,10 @@ export function createBuilding(state: GameState, kind: BuildingKind, level: numb
 
 export function isProductionBuilding(kind: BuildingKind): boolean {
   return PRODUCTION_BUILDINGS.has(kind);
+}
+
+export function isEncampment(kind: BuildingKind): boolean {
+  return ENCAMPMENT_BUILDINGS.has(kind);
 }
 
 export function buildingCost(state: GameState, empireId: EmpireId, kind: BuildingKind): number {

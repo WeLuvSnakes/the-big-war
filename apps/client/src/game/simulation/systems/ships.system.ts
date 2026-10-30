@@ -4,12 +4,12 @@ import type { GameState } from '../../state/state.types';
 import { findSeaRoute } from '../../ship/sea-route.service';
 import { portWaterBody } from '../../map/port-site.service';
 import { NEUTRAL_OWNER } from '../../empire/empire.constants';
-import { returnToReserve } from '../../troops/troops.service';
 import { shellingFactor } from '../../building/building.service';
 import { nextInt } from '@the-big-war/game-engine/rng/rng.service';
 import { canAttack, declareWar } from '../../diplomacy/diplomacy.service';
 import { allBuildingCells, setBuilding } from '../../map/world-index.service';
 import { area, gridAt, gridCoord } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { drawFromEncampments, returnToReserve, takeGarrison } from '../../troops/troops.service';
 import { launchBeachhead, launchOffensive, shellOffensives } from '../../offensive/offensive.service';
 import {
   atWar,
@@ -87,7 +87,7 @@ function land(state: GameState, ship: Ship): void {
   ship.hp = 0;
   if (beach.owner === ship.empire) {
     const owner = gridAt(state.grid, focus)?.owner ?? NEUTRAL_OWNER;
-    if (owner === ship.empire || !launchOffensive(state, ship.empire, owner, focus, troops)) {
+    if (owner === ship.empire || !launchOffensive(state, ship.empire, owner, focus, troops, beach)) {
       returnToReserve(state, ship.empire, troops);
     }
     return;
@@ -154,16 +154,16 @@ function shellCoast(state: GameState, ship: Ship, range: number): boolean {
   }
   if (!best) return false;
   const { coastTroopDamage, coastBuildingHits } = state.config.ship;
-  const defender = state.empires[best.owner]!;
   const hit = coastTroopDamage * shellingFactor(state, best.owner, best);
-  defender.soldiers = Math.max(0, defender.soldiers - hit);
+  drawFromEncampments(state, best.owner, best, hit);
   shellOffensives(state, ship.empire, best, 1, hit);
   const building = best.building;
   if (building) {
     building.shellDamage += 1;
     if (building.shellDamage >= coastBuildingHits * building.level) {
-      if (building.garrison > 0) returnToReserve(state, best.owner, building.garrison);
+      const troops = takeGarrison(state, best);
       setBuilding(state, best, null);
+      returnToReserve(state, best.owner, troops);
     }
   }
   return true;

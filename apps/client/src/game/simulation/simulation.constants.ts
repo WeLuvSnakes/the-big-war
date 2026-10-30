@@ -22,4 +22,5 @@ export const ENGINE_TUNING = {
   waveFocusPull: 1.5,
   waveJitter: 4,
   waveRecentTiles: 8,
+  defenceRadius: 2,
 } as const;

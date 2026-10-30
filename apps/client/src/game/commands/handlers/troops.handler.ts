@@ -1,19 +1,23 @@
 import { withLiveEmpire } from '../command-guards';
-import { isWater } from '../../map/terrain.service';
-import type { Empire } from '../../empire/empire.types';
 import type { GameState } from '../../state/state.types';
 import { NEUTRAL_OWNER } from '../../empire/empire.constants';
+import { garrisonedTroops } from '../../trench/trench.service';
+import { isEncampment } from '../../building/building.service';
+import { buildingCellsOf } from '../../map/world-index.service';
+import { isClaimable, isWater } from '../../map/terrain.service';
+import type { Offensive } from '../../offensive/offensive.types';
+import { drawFromEncampments } from '../../troops/troops.service';
 import { launchTransport, planLanding } from '../../ship/ship.service';
 import { canAttack, declareWar } from '../../diplomacy/diplomacy.service';
 import { percentShare } from '@the-big-war/game-engine/math/math.service';
 import { ok, fail } from '@the-big-war/game-engine/commands/command.service';
-import { bordersOwner, launchOffensive } from '../../offensive/offensive.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
-import { gridAt, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import type { CommandResult, RecallOffensiveCommand, SendTroopsCommand } from '../commands.types';
+import { distance, gridAt, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { bordersOwner, canLaunch, launchOffensive, seedFrontier, startMarch } from '../../offensive/offensive.service';
+import type { CommandResult, OrderOffensiveCommand, RecallOffensiveCommand, SendTroopsCommand } from '../commands.types';
 
-export const handleSendTroops = withLiveEmpire<SendTroopsCommand>((state, command, empire) => {
-  const troops = percentShare(empire.soldiers, command.percent);
+export const handleSendTroops = withLiveEmpire<SendTroopsCommand>((state, command) => {
+  const troops = percentShare(garrisonedTroops(state, command.empire), command.percent);
   if (troops <= 0) return fail(command.type, 'insufficient_troops');
 
   const to = gridAt(state.grid, command.target);
@@ -21,17 +25,17 @@ export const handleSendTroops = withLiveEmpire<SendTroopsCommand>((state, comman
 
   if (isWater(to.terrain)) return fail(command.type, 'invalid_target');
   const target = landTarget(state, command.empire, to.owner, landmassAt(state, command.target));
-  if (target === null) return sendByTransport(state, command, empire, to.owner, troops);
+  if (target === null) return sendByTransport(state, command, to.owner, troops);
   if (target !== NEUTRAL_OWNER) {
     const attackCheck = canAttack(state, command.empire, target);
     if (!attackCheck.allowed) return fail(command.type, attackCheck.reason ?? 'invalid_target');
     declareWar(state, command.empire, target);
   }
 
-  if (!launchOffensive(state, command.empire, target, command.target, troops)) {
-    return fail(command.type, 'invalid_target');
-  }
-  empire.soldiers -= troops;
+  if (!canLaunch(state, command.empire, target, command.target)) return fail(command.type, 'invalid_target');
+  const drawn = drawFromEncampments(state, command.empire, command.target, troops);
+  if (!drawn) return fail(command.type, 'insufficient_troops');
+  launchOffensive(state, command.empire, target, command.target, drawn.troops, drawn.from);
   return ok(command.type);
 });
 
@@ -47,7 +51,6 @@ function landTarget(state: GameState, empire: number, owner: number, landmass: n
 function sendByTransport(
   state: GameState,
   command: SendTroopsCommand,
-  empire: Empire,
   owner: number,
   troops: number,
 ): CommandResult {
@@ -58,17 +61,75 @@ function sendByTransport(
   const plan = planLanding(state, command.empire, command.target, owner);
   if (typeof plan === 'string') return fail(command.type, plan);
   if (owner !== NEUTRAL_OWNER) declareWar(state, command.empire, owner);
-  launchTransport(state, command.empire, plan, command.target, troops);
-  empire.soldiers -= troops;
+  const drawn = drawFromEncampments(state, command.empire, command.target, troops);
+  if (!drawn) return fail(command.type, 'insufficient_troops');
+  launchTransport(state, command.empire, plan, command.target, drawn.troops);
   return ok(command.type);
 }
 
-export const handleRecallOffensive = withLiveEmpire<RecallOffensiveCommand>((state, command, empire) => {
-  const index = state.offensives.findIndex(item => item.id === command.offensive && item.empire === command.empire);
-  if (index < 0) return fail(command.type, 'invalid_target');
-  const offensive = state.offensives[index]!;
-  empire.soldiers += offensive.troops * (1 - state.config.wave.retreatPenalty);
-  offensive.troops = 0;
-  state.offensives.splice(index, 1);
+function ownOffensive(state: GameState, empire: number, id: number): Offensive | undefined {
+  return state.offensives.find(item => item.id === id && item.empire === empire);
+}
+
+export const handleOrderOffensive = withLiveEmpire<OrderOffensiveCommand>((state, command) => {
+  const offensive = ownOffensive(state, command.empire, command.offensive);
+  const to = gridAt(state.grid, command.target);
+  if (!offensive || !to || !isClaimable(to.terrain)) return fail(command.type, 'invalid_target');
+  if (to.owner === command.empire) {
+    offensive.mission = 'hold';
+    offensive.focus = { q: to.q, r: to.r };
+    startMarch(state, offensive, offensive.head, offensive.focus);
+    return ok(command.type);
+  }
+  if (to.owner !== NEUTRAL_OWNER) {
+    const attackCheck = canAttack(state, command.empire, to.owner);
+    if (!attackCheck.allowed) return fail(command.type, attackCheck.reason ?? 'invalid_target');
+    declareWar(state, command.empire, to.owner);
+  }
+  offensive.mission = 'attack';
+  offensive.target = to.owner;
+  offensive.focus = { q: to.q, r: to.r };
+  seedFrontier(state, offensive);
+  const entry = nearestQueued(state, offensive);
+  if (entry) startMarch(state, offensive, offensive.head, entry);
   return ok(command.type);
 });
+
+function nearestQueued(state: GameState, offensive: Offensive): Axial | null {
+  let best: Axial | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const at of offensive.queued) {
+    const cell = state.grid.cells[at]!;
+    const d = distance(cell, offensive.head);
+    if (d < bestDistance) {
+      best = { q: cell.q, r: cell.r };
+      bestDistance = d;
+    }
+  }
+  return best;
+}
+
+export const handleRecallOffensive = withLiveEmpire<RecallOffensiveCommand>((state, command) => {
+  const offensive = ownOffensive(state, command.empire, command.offensive);
+  if (!offensive) return fail(command.type, 'invalid_target');
+  offensive.troops *= 1 - state.config.wave.retreatPenalty;
+  offensive.mission = 'retreat';
+  const home = nearestEncampment(state, offensive);
+  if (home) startMarch(state, offensive, offensive.head, home);
+  else offensive.march = null;
+  return ok(command.type);
+});
+
+function nearestEncampment(state: GameState, offensive: Offensive): Axial | null {
+  let best: Axial | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const cell of buildingCellsOf(state, offensive.empire)) {
+    if (!cell.building || !isEncampment(cell.building.kind) || cell.building.buildRemaining > 0) continue;
+    const d = distance(cell, offensive.head);
+    if (d < bestDistance) {
+      best = { q: cell.q, r: cell.r };
+      bestDistance = d;
+    }
+  }
+  return best;
+}

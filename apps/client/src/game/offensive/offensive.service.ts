@@ -1,13 +1,13 @@
 import type { HexCell } from '../map/map.types';
+import type { Offensive } from './offensive.types';
 import type { GameState } from '../state/state.types';
 import type { EmpireId } from '../empire/empire.types';
+import { ownedCells } from '../map/world-index.service';
 import { NEUTRAL_OWNER } from '../empire/empire.constants';
 import { returnToReserve } from '../troops/troops.service';
 import { shellingFactor } from '../building/building.service';
 import { isClaimable, isPassable } from '../map/terrain.service';
 import { ENGINE_TUNING } from '../simulation/simulation.constants';
-import type { Offensive, OffensiveMarch } from './offensive.types';
-import { buildingCellsOf, ownedCells } from '../map/world-index.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { createMinHeap, heapClear, heapPush } from '@the-big-war/game-engine/collections/min-heap.service';
 import { distance, gridIndex, neighbors, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
@@ -32,7 +32,7 @@ export function canEnter(offensive: Offensive, cell: HexCell): boolean {
   return cell.q === offensive.focus.q && cell.r === offensive.focus.r;
 }
 
-function seedFrontier(state: GameState, offensive: Offensive): void {
+export function seedFrontier(state: GameState, offensive: Offensive): void {
   heapClear(offensive.frontier);
   offensive.queued.clear();
   offensive.order = 0;
@@ -71,6 +71,7 @@ function newOffensive(state: GameState, empire: EmpireId, target: EmpireId, focu
     id: state.nextOffensiveId++,
     empire,
     target,
+    mission: 'attack',
     troops,
     focus: { q: focus.q, r: focus.r },
     head: { q: focus.q, r: focus.r },
@@ -84,44 +85,48 @@ function newOffensive(state: GameState, empire: EmpireId, target: EmpireId, focu
   };
 }
 
+export function canLaunch(state: GameState, empire: EmpireId, target: EmpireId, focus: Axial): boolean {
+  const aimed = gridAt(state.grid, focus);
+  if (!aimed || !isClaimable(aimed.terrain)) return false;
+  const landmass = target === NEUTRAL_OWNER ? state.map.landmass[gridIndex(state.grid, focus.q, focus.r)] : undefined;
+  return bordersOwner(state, empire, target, landmass);
+}
+
 export function launchOffensive(
   state: GameState,
   empire: EmpireId,
   target: EmpireId,
   focus: Axial,
   troops: number,
+  from?: Axial,
 ): boolean {
-  const aimed = gridAt(state.grid, focus);
-  if (!aimed || !isClaimable(aimed.terrain)) return false;
-  const landmass = target === NEUTRAL_OWNER ? state.map.landmass[gridIndex(state.grid, focus.q, focus.r)] : undefined;
-  if (!bordersOwner(state, empire, target, landmass)) return false;
+  if (!canLaunch(state, empire, target, focus)) return false;
   const remaining = cancelOpposing(state, empire, target, troops);
-  const existing = state.offensives.find(item => item.empire === empire && item.target === target);
-  if (existing) {
-    existing.troops += remaining;
-    existing.focus = { q: focus.q, r: focus.r };
-    seedFrontier(state, existing);
-    return true;
-  }
   if (remaining <= 0) return true;
   const offensive = newOffensive(state, empire, target, focus, remaining);
   seedFrontier(state, offensive);
-  offensive.march = planMarch(state, offensive);
+  const entry = entryFor(state, offensive);
+  if (entry) startMarch(state, offensive, from ?? entry, entry);
   state.offensives.push(offensive);
   return true;
 }
 
-function planMarch(state: GameState, offensive: Offensive): OffensiveMarch | null {
-  const from = nearestBy(buildingCellsOf(state, offensive.empire), offensive.focus);
-  const entry = nearestBy([...offensive.queued].map(at => state.grid.cells[at]!), offensive.focus);
-  if (!from || !entry) return null;
+function entryFor(state: GameState, offensive: Offensive): HexCell | null {
+  return nearestBy([...offensive.queued].map(at => state.grid.cells[at]!), offensive.focus);
+}
+
+export function startMarch(state: GameState, offensive: Offensive, from: Axial, to: Axial): void {
+  offensive.captureTile = undefined;
+  offensive.captureHealth = undefined;
+  offensive.captureHitAt = undefined;
   const { marchSecondsPerHex, maxMarchSeconds } = state.config.wave;
-  const duration = Math.min(maxMarchSeconds, distance(from, entry) * marchSecondsPerHex);
-  if (duration <= 0) return null;
-  const start = { q: from.q, r: from.r };
+  const duration = Math.min(maxMarchSeconds, distance(from, to) * marchSecondsPerHex);
+  const moving = duration > 0;
+  const start = moving ? { q: from.q, r: from.r } : { q: to.q, r: to.r };
   offensive.head = start;
+  offensive.recent.length = 0;
   offensive.recent.push(start);
-  return { from: start, to: { q: entry.q, r: entry.r }, duration, progress: 0 };
+  offensive.march = moving ? { from: start, to: { q: to.q, r: to.r }, duration, progress: 0 } : null;
 }
 
 function nearestBy(cells: Iterable<HexCell>, to: Axial): HexCell | null {
@@ -141,14 +146,10 @@ export function launchBeachhead(state: GameState, empire: EmpireId, beach: HexCe
   const target = beach.owner;
   const remaining = cancelOpposing(state, empire, target, troops);
   if (remaining <= 0) return;
-  let offensive = state.offensives.find(item => item.empire === empire && item.target === target);
-  if (offensive) offensive.troops += remaining;
-  else {
-    offensive = newOffensive(state, empire, target, focus, remaining);
-    state.offensives.push(offensive);
-  }
-  offensive.focus = { q: focus.q, r: focus.r };
+  const offensive = newOffensive(state, empire, target, focus, remaining);
   offensive.head = { q: beach.q, r: beach.r };
+  offensive.recent.push(offensive.head);
+  state.offensives.push(offensive);
   const index = gridIndex(state.grid, beach.q, beach.r);
   offensive.queued.add(index);
   heapPush(offensive.frontier, index, -Infinity);
@@ -177,6 +178,19 @@ export function troopsCommittedAgainst(state: GameState, attacker: EmpireId, def
   let total = 0;
   for (const offensive of state.offensives) {
     if (offensive.empire === attacker && offensive.target === defender) total += offensive.troops;
+  }
+  return total;
+}
+
+export function isDefending(offensive: Offensive, cell: HexCell, attacker: EmpireId): boolean {
+  if (cell.owner === NEUTRAL_OWNER || cell.owner === attacker || offensive.empire !== cell.owner) return false;
+  return distance(offensive.head, cell) <= ENGINE_TUNING.defenceRadius;
+}
+
+export function defendersAt(state: GameState, cell: HexCell, attacker: EmpireId): number {
+  let total = 0;
+  for (const offensive of state.offensives) {
+    if (isDefending(offensive, cell, attacker)) total += offensive.troops;
   }
   return total;
 }

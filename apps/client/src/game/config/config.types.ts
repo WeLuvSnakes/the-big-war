@@ -111,6 +111,12 @@ export interface WaveConfig {
   readonly densityWeight: number;
   readonly defenderLossShare: number;
   readonly sprawlCost: number;
+
+  readonly tileHealth: number;
+  readonly tileDamagePerTroop: number;
+  readonly tileHealSeconds: number;
+  readonly fightLossPerTroop: number;
+  readonly fightMinLossPerSecond: number;
 }
 
 export interface CombatConfig {
@@ -180,6 +186,7 @@ export interface RecruitConfig {
 
   readonly secondsPerSoldier: number;
   readonly cityReserveCap: number;
+  readonly bunkerReserveCap: number;
 
   readonly barracksReserveCap: number;
 

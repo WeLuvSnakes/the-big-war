@@ -33,7 +33,7 @@ export function isMannedMachineGun(cell: HexCell): boolean {
 export function garrisonedTroops(state: GameState, empire: EmpireId): number {
   let total = 0;
   for (const cell of buildingCellsOf(state, empire)) {
-    if (cell.building?.kind === 'trench') total += cell.building.garrison;
+    total += cell.building?.garrison ?? 0;
   }
   return total;
 }

@@ -19,10 +19,13 @@ export interface OffensiveMarch {
   progress: number;
 }
 
+export type OffensiveMission = 'attack' | 'hold' | 'retreat';
+
 export interface Offensive {
   readonly id: OffensiveId;
   readonly empire: EmpireId;
-  readonly target: EmpireId;
+  target: EmpireId;
+  mission: OffensiveMission;
 
   troops: number;
   focus: Axial;
@@ -32,6 +35,10 @@ export interface Offensive {
   budget: number;
   order: number;
   taken: number;
+
+  captureTile?: number;
+  captureHealth?: number;
+  captureHitAt?: number;
 
   readonly frontier: MinHeap;
   readonly queued: Set<number>;

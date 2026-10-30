@@ -1,16 +1,19 @@
 import { civilianGrowthRateOf } from './economy.system';
 import type { Empire } from '../../empire/empire.types';
 import type { GameState } from '../../state/state.types';
-import { deployedTroops } from '../../troops/troops.service';
+import { barracksTier } from '../../building/building.service';
+import { garrisonedTroops } from '../../trench/trench.service';
 import { allBuildingCells, populationWeight } from '../../map/world-index.service';
-import { barracksTier, countBuildingsOfKind } from '../../building/building.service';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
+import { addToEncampments, deployedTroops, killExcessTroops, troopCapacity } from '../../troops/troops.service';
 
 export function stepRecruitment(state: GameState, dt: number): void {
   const recruit = state.config.recruit;
   const output = barracksOutput(state);
 
   for (const empire of state.empires) {
+    empire.soldiers = garrisonedTroops(state, empire.id);
+    killExcessTroops(state, empire.id);
     if (!empire.alive) {
       empire.civilianBalance = 0;
       empire.troopBalance = 0;
@@ -37,7 +40,7 @@ export function stepRecruitment(state: GameState, dt: number): void {
         dt / recruit.draftSecondsPerSoldier,
         empire.civilians / recruit.civiliansPerSoldier,
       );
-      empire.soldiers += drafted;
+      addToEncampments(state, empire.id, drafted);
       empire.civilians = Math.max(0, empire.civilians - drafted * recruit.civiliansPerSoldier);
     }
 
@@ -51,7 +54,7 @@ export function stepRecruitment(state: GameState, dt: number): void {
         goldPerSoldier > 0 ? empire.gold / goldPerSoldier : Infinity,
       ),
     );
-    empire.soldiers += trained;
+    addToEncampments(state, empire.id, trained);
     empire.gold = Math.max(0, empire.gold - trained * goldPerSoldier);
     empire.civilians = Math.max(0, empire.civilians + civilianGrowthRateOf(empire.id) * dt - trained * recruit.civiliansPerSoldier);
 
@@ -68,21 +71,7 @@ export function draftCapOf(state: GameState, empire: Empire, cap: number): numbe
 }
 
 export function reserveCapOf(state: GameState, empire: Empire): number {
-  const recruit = state.config.recruit;
-  const barracks = countBuildingsOfKind(state, empire.id, 'barracks');
-  const forts = countBuildingsOfKind(state, empire.id, 'fort');
-  const cities = countBuildingsOfKind(state, empire.id, 'city');
-  const raw =
-    cities * recruit.cityReserveCap +
-    barracks * recruit.barracksReserveCap +
-    forts * recruit.fortReserveCap +
-    populationWeight(state, empire.id) * recruit.troopsPerTile;
-  return Math.max(
-    0,
-    Math.floor(
-      resolveModifier(raw, empire.bonuses.reserveCap),
-    ),
-  );
+  return Math.max(0, Math.floor(troopCapacity(state, empire.id)));
 }
 
 interface BarracksOutput {
