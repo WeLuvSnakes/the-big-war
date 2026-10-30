@@ -1,12 +1,10 @@
-import type { GameState } from '../../state/state.types';
+import { withLiveEmpire } from '../command-guards';
+import type { StartResearchCommand } from '../commands.types';
 import { RESEARCH_BY_ID } from '../../research/research.constants';
 import { meetsRequirements } from '../../research/research.service';
 import { ok, fail } from '@the-big-war/game-engine/commands/command.service';
-import type { CommandResult, StartResearchCommand } from '../commands.types';
 
-export function handleStartResearch(state: GameState, command: StartResearchCommand): CommandResult {
-  const empire = state.empires[command.empire];
-  if (!empire || !empire.alive) return fail(command.type, 'no_empire');
+export const handleStartResearch = withLiveEmpire<StartResearchCommand>((_state, command, empire) => {
   const node = RESEARCH_BY_ID.get(command.nodeId);
   if (!node) return fail(command.type, 'research_unavailable');
   if (!meetsRequirements(empire.research, node)) return fail(command.type, 'research_unavailable');
@@ -24,4 +22,4 @@ export function handleStartResearch(state: GameState, command: StartResearchComm
   empire.science -= node.cost;
   empire.research.active = { nodeId: node.id, progress: 0, optionId };
   return ok(command.type);
-}
+});

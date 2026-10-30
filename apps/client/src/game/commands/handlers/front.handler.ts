@@ -1,3 +1,4 @@
+import { withLiveEmpire } from '../command-guards';
 import type { GameState } from '../../state/state.types';
 import { findFront, sideOf } from '../../front/front.service';
 import { ok, fail } from '@the-big-war/game-engine/commands/command.service';
@@ -12,14 +13,13 @@ export function handleSetFrontMode(state: GameState, command: SetFrontModeComman
   return ok(command.type);
 }
 
-export function handleRetreatFront(state: GameState, command: RetreatFrontCommand): CommandResult {
+export const handleRetreatFront = withLiveEmpire<RetreatFrontCommand>((state, command, empire) => {
   const front = findFront(state, command.frontId);
   if (!front) return fail(command.type, 'invalid_target');
   const side = sideOf(front, command.empire);
-  const empire = state.empires[command.empire];
-  if (!side || !empire) return fail(command.type, 'invalid_target');
+  if (!side) return fail(command.type, 'invalid_target');
   const returned = Math.floor(side.troops * (1 - state.config.front.retreatPenalty));
   empire.soldiers += returned;
   side.troops = 0;
   return ok(command.type);
-}
+});

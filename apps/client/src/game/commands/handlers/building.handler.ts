@@ -1,3 +1,4 @@
+import { withLiveEmpire } from '../command-guards';
 import type { GameState } from '../../state/state.types';
 import { ENGINE_TUNING } from '../../simulation/simulation.constants';
 import { ok, fail } from '@the-big-war/game-engine/commands/command.service';
@@ -28,16 +29,14 @@ export function handlePlaceBuilding(state: GameState, command: PlaceBuildingComm
   return ok(command.type);
 }
 
-export function handleDemolishBuilding(state: GameState, command: DemolishBuildingCommand): CommandResult {
-  const empire = state.empires[command.empire];
-  if (!empire || !empire.alive) return fail(command.type, 'no_empire');
+export const handleDemolishBuilding = withLiveEmpire<DemolishBuildingCommand>((state, command) => {
   const cell = gridAt(state.grid, command.hex);
   if (!cell || !cell.building) return fail(command.type, 'invalid_target');
   if (cell.owner !== command.empire) return fail(command.type, 'invalid_target');
 
   cell.building.demolishAt = state.elapsed + state.config.demolish.durationSeconds;
   return ok(command.type);
-}
+});
 
 export function handleUpgradeBuilding(state: GameState, command: UpgradeBuildingCommand): CommandResult {
   const error = upgradeError(state, command.empire, command.hex);

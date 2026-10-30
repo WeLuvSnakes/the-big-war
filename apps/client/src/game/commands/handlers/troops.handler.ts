@@ -1,19 +1,18 @@
+import { withLiveEmpire } from '../command-guards';
 import { isPassable } from '../../map/terrain.service';
 import type { GameState } from '../../state/state.types';
 import { NEUTRAL_OWNER } from '../../empire/empire.constants';
 import { canAttack, declareWar } from '../../diplomacy/diplomacy.service';
+import { percentShare } from '@the-big-war/game-engine/math/math.service';
 import type { CommandResult, SendTroopsCommand } from '../commands.types';
 import { ok, fail } from '@the-big-war/game-engine/commands/command.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { distance, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { joinFront, launchExpedition, marchPath, stagingHex } from '../../troops/troops.service';
 
-export function handleSendTroops(state: GameState, command: SendTroopsCommand): CommandResult {
-  const empire = state.empires[command.empire];
-  if (!empire || !empire.alive) return fail(command.type, 'no_empire');
+export const handleSendTroops = withLiveEmpire<SendTroopsCommand>((state, command, empire) => {
 
-  const percent = Math.max(1, Math.min(100, Math.round(command.percent)));
-  const troops = Math.min(Math.floor(empire.soldiers), Math.max(1, Math.floor((empire.soldiers * percent) / 100)));
+  const troops = percentShare(empire.soldiers, command.percent);
   if (troops <= 0) return fail(command.type, 'insufficient_troops');
 
   const from = gridAt(state.grid, command.hex);
@@ -44,7 +43,7 @@ export function handleSendTroops(state: GameState, command: SendTroopsCommand): 
     return fail(command.type, 'invalid_target');
   }
   return ok(command.type);
-}
+});
 
 function marchColumn(
   state: GameState,

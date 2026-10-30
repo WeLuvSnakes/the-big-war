@@ -1,13 +1,11 @@
-import type { GameState } from '../../state/state.types';
+import { withLiveEmpire } from '../command-guards';
 import { incidentFronts } from '../../front/front.service';
+import type { FireCannonCommand } from '../commands.types';
 import { shellingFactor } from '../../building/building.service';
-import type { CommandResult, FireCannonCommand } from '../commands.types';
 import { ok, fail } from '@the-big-war/game-engine/commands/command.service';
 import { distance, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
-export function handleFireCannon(state: GameState, command: FireCannonCommand): CommandResult {
-  const empire = state.empires[command.empire];
-  if (!empire || !empire.alive) return fail(command.type, 'no_empire');
+export const handleFireCannon = withLiveEmpire<FireCannonCommand>((state, command, empire) => {
   const from = gridAt(state.grid, command.from);
   if (!from || from.owner !== command.empire) return fail(command.type, 'invalid_target');
   if (from.building?.kind !== 'cannon' || from.building.buildRemaining > 0) return fail(command.type, 'invalid_target');
@@ -31,4 +29,4 @@ export function handleFireCannon(state: GameState, command: FireCannonCommand): 
 
   if (cannon.destroysTerrain.includes(target.terrain)) target.terrain = 'plain';
   return ok(command.type);
-}
+});
