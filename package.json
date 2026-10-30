@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "lint": "bun libs/linter/src/cli.ts apps libs",
-    "lint:fix": "bun libs/linter/src/cli.ts apps libs --fix"
+    "lint:fix": "bun libs/linter/src/cli.ts apps libs --fix",
+    "check": "bun run lint && bun run typecheck && bun test && bun run build",
+    "new": "bun libs/scaffold/src/cli.ts"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

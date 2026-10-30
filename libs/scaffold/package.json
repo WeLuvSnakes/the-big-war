@@ -1,0 +1,12 @@
+{
+  "name": "@the-big-war/scaffold",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "tbw-new": "./src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4"
+  }
+}
