@@ -18,16 +18,63 @@ import {
   weaponDamage,
 } from '../../unit/unit.service';
 
+const BUCKET_PX = 64;
+
+interface UnitWorld {
+  readonly state: GameState;
+  readonly byId: ReadonlyMap<number, Unit>;
+  readonly buckets: Map<number, Unit[]>;
+  readonly relations: Map<number, boolean>;
+}
+
+const bucketKey = (bx: number, by: number): number => bx * 4096 + by;
+
+function indexUnits(state: GameState): UnitWorld {
+  const buckets = new Map<number, Unit[]>();
+  for (const unit of state.units) {
+    const key = bucketKey(Math.floor(unit.x / BUCKET_PX), Math.floor(unit.y / BUCKET_PX));
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(unit);
+    else buckets.set(key, [unit]);
+  }
+  return { state, byId: new Map(state.units.map(unit => [unit.id, unit])), buckets, relations: new Map() };
+}
+
+function hostile(world: UnitWorld, a: number, b: number): boolean {
+  if (a === b) return false;
+  const key = a * 1024 + b;
+  let known = world.relations.get(key);
+  if (known === undefined) {
+    known = hostileUnits(world.state, a, b);
+    world.relations.set(key, known);
+  }
+  return known;
+}
+
+function near(world: UnitWorld, x: number, y: number, radius: number, visit: (unit: Unit) => void): void {
+  const minX = Math.floor((x - radius) / BUCKET_PX);
+  const maxX = Math.floor((x + radius) / BUCKET_PX);
+  const minY = Math.floor((y - radius) / BUCKET_PX);
+  const maxY = Math.floor((y + radius) / BUCKET_PX);
+  for (let bx = minX; bx <= maxX; bx++) {
+    for (let by = minY; by <= maxY; by++) {
+      const bucket = world.buckets.get(bucketKey(bx, by));
+      if (bucket) for (const unit of bucket) visit(unit);
+    }
+  }
+}
+
 export function stepUnits(state: GameState, dt: number): void {
   if (state.units.some(unit => !state.empires[unit.empire]?.alive)) {
     state.units = state.units.filter(unit => state.empires[unit.empire]?.alive);
   }
   stepProduction(state, dt);
   if (state.units.length === 0) return;
-  const byId = new Map(state.units.map(unit => [unit.id, unit]));
-  for (const unit of state.units) stepUnit(state, unit, byId, dt);
+  const world = indexUnits(state);
+  for (const unit of state.units) stepUnit(world, unit, dt);
   removeDead(state);
-  for (const unit of state.units) stepCapture(state, unit, dt);
+  const after = indexUnits(state);
+  for (const unit of state.units) stepCapture(after, unit, dt);
 }
 
 function stepProduction(state: GameState, dt: number): void {
@@ -67,19 +114,21 @@ function spawnFrom(state: GameState, line: ProductionQueue, kind: Unit['kind']):
   state.units.push(createUnit(state, kind, line.empire, cx, cy));
 }
 
+const MAX_UNIT_SIZE = 13;
+
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }): number => Math.hypot(a.x - b.x, a.y - b.y);
 
-function pickTarget(state: GameState, unit: Unit, range: number, preferVehicles: boolean, infantryOnly: boolean): Unit | null {
+function pickTarget(world: UnitWorld, unit: Unit, range: number, preferVehicles: boolean, infantryOnly: boolean): Unit | null {
   let best: Unit | null = null;
   let bestDistance = Infinity;
   let vehicle: Unit | null = null;
   let vehicleDistance = Infinity;
-  for (const other of state.units) {
-    if (other.empire === unit.empire || other.hp <= 0 || !hostileUnits(state, unit.empire, other.empire)) continue;
+  near(world, unit.x, unit.y, range, other => {
+    if (other.empire === unit.empire || other.hp <= 0 || !hostile(world, unit.empire, other.empire)) return;
     const gap = distance(unit, other);
-    if (gap > range) continue;
+    if (gap > range) return;
     const isVehicle = unitStats(other.kind).vehicle;
-    if (infantryOnly && isVehicle) continue;
+    if (infantryOnly && isVehicle) return;
     if (gap < bestDistance) {
       bestDistance = gap;
       best = other;
@@ -88,7 +137,7 @@ function pickTarget(state: GameState, unit: Unit, range: number, preferVehicles:
       vehicleDistance = gap;
       vehicle = other;
     }
-  }
+  });
   return preferVehicles && vehicle ? vehicle : best;
 }
 
@@ -103,7 +152,8 @@ function hitChance(state: GameState, shooter: Unit, weapon: WeaponStats, target:
   return weapon.accuracy * range * movement * pinned * cover * size;
 }
 
-function fire(state: GameState, shooter: Unit, weapon: WeaponStats, target: Unit, moving: boolean): void {
+function fire(world: UnitWorld, shooter: Unit, weapon: WeaponStats, target: Unit, moving: boolean): void {
+  const { state } = world;
   const hit = nextFloat(state.rng) < hitChance(state, shooter, weapon, target, moving);
   const spread = weapon.splash > 0 ? UNIT_TUNING.missSpreadHeavy : UNIT_TUNING.missSpreadSmall;
   const miss = hit ? 0 : UNIT_TUNING.missSpread + nextFloat(state.rng) * spread;
@@ -125,14 +175,14 @@ function fire(state: GameState, shooter: Unit, weapon: WeaponStats, target: Unit
     radius: weapon.splash,
   });
   if (weapon.splash > 0) {
-    for (const other of state.units) {
-      if (other.empire === shooter.empire || !hostileUnits(state, shooter.empire, other.empire)) continue;
+    near(world, ex, ey, weapon.splash * UNIT_TUNING.splashSuppressionRange, other => {
+      if (other.empire === shooter.empire || !hostile(world, shooter.empire, other.empire)) return;
       const gap = Math.hypot(other.x - ex, other.y - ey);
       if (gap < weapon.splash) {
         other.hp -= weaponDamage(unitStats(other.kind), weapon.penetration, weapon.damage * (1 - (gap / weapon.splash) * UNIT_TUNING.splashFalloff));
       }
       if (gap < weapon.splash * UNIT_TUNING.splashSuppressionRange) other.suppression = 100;
-    }
+    });
     return;
   }
   if (hit) target.hp -= weaponDamage(unitStats(target.kind), weapon.penetration, weapon.damage);
@@ -143,12 +193,13 @@ function jitter(state: GameState): number {
   return 1 - UNIT_TUNING.cooldownJitter / 2 + nextFloat(state.rng) * UNIT_TUNING.cooldownJitter;
 }
 
-function stepUnit(state: GameState, unit: Unit, byId: ReadonlyMap<number, Unit>, dt: number): void {
+function stepUnit(world: UnitWorld, unit: Unit, dt: number): void {
+  const { state, byId } = world;
   const stats = unitStats(unit.kind);
   unit.suppression = stats.vehicle ? 0 : Math.max(0, unit.suppression - dt * UNIT_TUNING.suppressionDecay);
 
   let chased = unit.target === null ? undefined : byId.get(unit.target);
-  if (chased && (chased.hp <= 0 || !hostileUnits(state, unit.empire, chased.empire))) chased = undefined;
+  if (chased && (chased.hp <= 0 || !hostile(world, unit.empire, chased.empire))) chased = undefined;
   if (!chased) unit.target = null;
 
   if (unit.mode === 'guard') {
@@ -159,20 +210,20 @@ function stepUnit(state: GameState, unit: Unit, byId: ReadonlyMap<number, Unit>,
     }
     if (!chased) {
       let best: number = UNIT_TUNING.guardRadius;
-      for (const other of state.units) {
-        if (other.empire === unit.empire || !hostileUnits(state, unit.empire, other.empire)) continue;
+      near(world, unit.gx, unit.gy, best, other => {
+        if (other.empire === unit.empire || other.hp <= 0 || !hostile(world, unit.empire, other.empire)) return;
         const gap = Math.hypot(other.x - unit.gx, other.y - unit.gy);
         if (gap < best) {
           best = gap;
           chased = other;
           unit.target = other.id;
         }
-      }
+      });
     }
   }
 
   let target = chased && distance(unit, chased) <= stats.weapon.range ? chased : null;
-  if (!target) target = pickTarget(state, unit, stats.weapon.range, unit.kind === 'tank', false);
+  if (!target) target = pickTarget(world, unit, stats.weapon.range, unit.kind === 'tank', false);
 
   let goalX = unit.tx;
   let goalY = unit.ty;
@@ -206,19 +257,19 @@ function stepUnit(state: GameState, unit: Unit, byId: ReadonlyMap<number, Unit>,
     }
   }
 
-  separate(state, unit, stats);
+  separate(world, unit, stats);
 
   unit.cooldown -= dt;
   if (target && unit.cooldown <= 0 && unit.setup <= 0) {
     unit.face = Math.atan2(target.y - unit.y, target.x - unit.x);
-    fire(state, unit, stats.weapon, target, moving);
+    fire(world, unit, stats.weapon, target, moving);
     unit.cooldown = stats.weapon.cooldown * jitter(state);
   }
   if (stats.coax) {
     unit.coaxCooldown -= dt;
-    const close = pickTarget(state, unit, stats.coax.range, false, true);
-    if (close && unit.coaxCooldown <= 0) {
-      fire(state, unit, stats.coax, close, moving);
+    const close = unit.coaxCooldown <= 0 ? pickTarget(world, unit, stats.coax.range, false, true) : null;
+    if (close) {
+      fire(world, unit, stats.coax, close, moving);
       unit.coaxCooldown = stats.coax.cooldown * jitter(state);
     }
   }
@@ -235,18 +286,19 @@ function move(state: GameState, unit: Unit, dx: number, dy: number): void {
   }
 }
 
-function separate(state: GameState, unit: Unit, stats: UnitStats): void {
-  for (const other of state.units) {
-    if (other === unit) continue;
+function separate(world: UnitWorld, unit: Unit, stats: UnitStats): void {
+  const { state } = world;
+  near(world, unit.x, unit.y, stats.size + MAX_UNIT_SIZE, other => {
+    if (other === unit) return;
     const otherSize = unitStats(other.kind).size;
     const ox = unit.x - other.x;
     const oy = unit.y - other.y;
     const gap = Math.hypot(ox, oy);
     const need = stats.size + otherSize - 1;
-    if (gap >= need || gap <= 0) continue;
+    if (gap >= need || gap <= 0) return;
     const push = (need - gap) * (otherSize > stats.size ? 0.8 : 0.5);
     move(state, unit, (ox / gap) * push, (oy / gap) * push);
-  }
+  });
   const width = state.grid.width * state.config.map.hexSize;
   const height = state.grid.height * state.config.map.hexSize;
   unit.x = Math.min(width - 5, Math.max(5, unit.x));
@@ -276,23 +328,24 @@ function removeDead(state: GameState): void {
   state.units = state.units.filter(unit => unit.hp > 0);
 }
 
-function capturable(state: GameState, unit: Unit, cell: HexCell): boolean {
+function capturable(world: UnitWorld, unit: Unit, cell: HexCell): boolean {
   if (!isClaimable(cell.terrain) || cell.owner === unit.empire) return false;
-  return cell.owner === NEUTRAL_OWNER || hostileUnits(state, unit.empire, cell.owner);
+  return cell.owner === NEUTRAL_OWNER || hostile(world, unit.empire, cell.owner);
 }
 
-function contested(state: GameState, unit: Unit): boolean {
-  return state.units.some(
-    other =>
-      other.empire !== unit.empire &&
-      hostileUnits(state, unit.empire, other.empire) &&
-      distance(unit, other) < UNIT_TUNING.captureClearRadius,
-  );
+function contested(world: UnitWorld, unit: Unit): boolean {
+  let found = false;
+  near(world, unit.x, unit.y, UNIT_TUNING.captureClearRadius, other => {
+    if (found || other.empire === unit.empire || !hostile(world, unit.empire, other.empire)) return;
+    found = distance(unit, other) < UNIT_TUNING.captureClearRadius;
+  });
+  return found;
 }
 
-function stepCapture(state: GameState, unit: Unit, dt: number): void {
+function stepCapture(world: UnitWorld, unit: Unit, dt: number): void {
+  const { state } = world;
   const cell = cellAtPixel(state, unit.x, unit.y);
-  if (!cell || !capturable(state, unit, cell)) {
+  if (!cell || !capturable(world, unit, cell)) {
     unit.captureAt = -1;
     unit.capture = 0;
     return;
@@ -302,7 +355,7 @@ function stepCapture(state: GameState, unit: Unit, dt: number): void {
     unit.captureAt = at;
     unit.capture = 0;
   }
-  if (contested(state, unit)) return;
+  if (contested(world, unit)) return;
   const building = cell.building;
   if (building && building.garrison > 0) {
     building.garrison = Math.max(0, building.garrison - UNIT_TUNING.garrisonDrainPerSecond * dt);
