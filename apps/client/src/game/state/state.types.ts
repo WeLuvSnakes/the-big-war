@@ -8,6 +8,7 @@ import type { Rng } from '@the-big-war/game-engine/rng/rng.types';
 import type { GameConfig, GameSpeed } from '../config/config.types';
 import type { Offensive, OffensiveId } from '../offensive/offensive.types';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
+import type { ProductionQueue, Unit, UnitEvent, UnitId } from '../unit/unit.types';
 import type { SimulationState } from '@the-big-war/game-engine/simulation/simulation.types';
 import type { DiplomaticRelation, OfferCooldown, PendingOffer } from '../diplomacy/diplomacy.types';
 
@@ -28,6 +29,11 @@ export interface GameState extends SimulationState {
   nextShipId: ShipId;
   shipHash: Map<number, Ship[]>;
   tradeClock: number;
+  units: Unit[];
+  nextUnitId: UnitId;
+  production: ProductionQueue[];
+  unitEvents: UnitEvent[];
+  nextUnitEventId: number;
 
   landHexCount: number;
 
