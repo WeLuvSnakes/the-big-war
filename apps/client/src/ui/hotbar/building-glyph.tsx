@@ -5,6 +5,7 @@ import {
   FaBox,
   FaBuilding,
   FaCrosshairs,
+  FaHammer,
   FaLayerGroup,
   FaShieldAlt,
   FaShoppingBag,
@@ -36,6 +37,7 @@ const GLYPHS: Record<BuildingKind, (props: { class?: string }) => JSX.Element> =
   battery: FaStar,
   bunker: FaBox,
   tank: GiTank,
+  factory: FaHammer,
 };
 
 export function buildingGlyph(kind: BuildingKind): JSX.Element {

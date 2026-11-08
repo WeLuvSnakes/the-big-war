@@ -17,6 +17,7 @@ const ECONOMY_PLAN: readonly BuildingKind[] = ['market', 'fishery', 'farm', 'lum
 
 const MILITARY_PLAN: readonly BuildingKind[] = [
   'barracks',
+  'factory',
   'fort',
   'lab',
   'cannon',

@@ -9,6 +9,7 @@ export const BUILDING_KINDS: readonly BuildingKind[] = [
   'miner',
   'lab',
   'barracks',
+  'factory',
   'port',
   'fishery',
   'fort',

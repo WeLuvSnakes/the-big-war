@@ -161,5 +161,6 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
     battery: { cost: 140, buildSeconds: 12, requiresResearch: 'heavy_artillery' },
     bunker: { cost: 110, buildSeconds: 10, requiresResearch: 'reinforced_concrete' },
     tank: { cost: 160, buildSeconds: 10, requiresResearch: 'armour' },
+    factory: { cost: 120, buildSeconds: 10, requiresResearch: null },
   },
 };

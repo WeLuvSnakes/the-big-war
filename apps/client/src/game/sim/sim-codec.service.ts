@@ -31,6 +31,7 @@ const KINDS: readonly BuildingKind[] = [
   'battery',
   'bunker',
   'tank',
+  'factory',
 ];
 
 const TILE_STRIDE = 5;
