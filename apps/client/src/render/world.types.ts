@@ -1,4 +1,5 @@
 import type { FxKind } from './fx-layer';
+import type { UnitsView } from './units-layer';
 import type { OverlayState } from './overlay-layer';
 import type { GameState } from '../game/state/state.types';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
@@ -44,6 +45,10 @@ export interface WorldRenderer {
   
   setOverlay(overlay: Partial<OverlayState>): void;
   
+  setUnitsView(view: UnitsView): void;
+
+  pingUnits(x: number, y: number, color: number): void;
+
   spawnFx(kind: FxKind, hex: Axial, color?: number): void;
   
   screenToHex(screenX: number, screenY: number): Axial;

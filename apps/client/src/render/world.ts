@@ -2,8 +2,10 @@ import { FxLayer } from './fx-layer';
 import type { FxKind } from './fx-layer';
 import { RoadsLayer } from './roads-layer';
 import { ShipsLayer } from './ships-layer';
+import { UnitsLayer } from './units-layer';
 import { tileImageFor } from './tile-image';
 import { OverlayLayer } from './overlay-layer';
+import type { UnitsView } from './units-layer';
 import { SoldiersLayer } from './soldiers-layer';
 import { BuildingsLayer } from './buildings-layer';
 import type { OverlayState } from './overlay-layer';
@@ -70,6 +72,8 @@ export function createWorld(options: WorldOptions): WorldRenderer {
   const soldiers = new SoldiersLayer();
   soldiers.container.sortableChildren = true;
   const ships = new ShipsLayer();
+  const units = new UnitsLayer();
+  let unitsView: UnitsView = { player: -1, selected: new Set(), box: null };
   const nationLabels = new NationLabelsLayer();
   const fx = new FxLayer();
   const worldBorder = new Graphics();
@@ -167,6 +171,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
     overlay.draw(overlayState, hexSize);
     soldiers.draw(state, hexSize, range, tilePx);
     ships.draw(state, hexSize, cameraState.scale, range, overlayState.selectedShip);
+    units.draw(state, unitsView, cameraState.scale, dtSeconds);
     fx.update(dtSeconds);
 
     const borderWidth = WORLD_BORDER_WIDTH / cameraState.scale;
@@ -221,7 +226,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
         resolution: Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1),
         autoDensity: true,
       });
-      stage.addChild(terrain.container, roads.container, fieldworks.container, worldBorder, nationLabels.container, buildings.container, overlay.container, soldiers.container, ships.container, fx.container);
+      stage.addChild(terrain.container, roads.container, fieldworks.container, worldBorder, nationLabels.container, buildings.container, overlay.container, soldiers.container, ships.container, units.container, fx.container);
       app.stage.addChild(stage);
       options.host.appendChild(app.canvas);
       app.canvas.style.display = 'block';
@@ -263,6 +268,12 @@ export function createWorld(options: WorldOptions): WorldRenderer {
       if (next.ghost !== undefined) overlayState.ghost = next.ghost;
       if (next.selectedShip !== undefined) overlayState.selectedShip = next.selectedShip;
     },
+    setUnitsView(next: UnitsView): void {
+      unitsView = next;
+    },
+    pingUnits(x: number, y: number, color: number): void {
+      units.ping(x, y, color);
+    },
     spawnFx(kind: FxKind, hex: Axial, color?: number): void {
       const hexSize = lastState?.config.map.hexSize ?? 32;
       fx.spawn(kind, hex, hexSize, color);
@@ -292,6 +303,7 @@ export function createWorld(options: WorldOptions): WorldRenderer {
       roads.reset();
       soldiers.reset();
       ships.reset();
+      units.reset();
       fx.clear();
       terrain.invalidate();
       app.destroy(true, { children: true });
