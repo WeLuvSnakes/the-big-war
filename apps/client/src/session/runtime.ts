@@ -25,6 +25,14 @@ const HOME_TILE_PX = 12;
 const LEFT_RAIL_PX = 72;
 const VIEW_EPSILON = 0.5;
 const SCALE_EPSILON = 0.001;
+const SCROLL_PX_PER_SECOND = 700;
+const EDGE_PX = 14;
+const ARROWS: Readonly<Record<string, readonly [number, number]>> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
 
 export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
   const { store, world, host } = options;
@@ -57,6 +65,19 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
     return hex;
   };
 
+  const heldKeys = new Set<string>();
+  let pointer: Pixel | null = null;
+
+  const localToWorld = (at: Pixel): Pixel => {
+    const rect = host.getBoundingClientRect();
+    return world.screenToWorld(at.x + rect.left, at.y + rect.top);
+  };
+
+  const localToClient = (at: Pixel): Pixel => {
+    const rect = host.getBoundingClientRect();
+    return { x: at.x + rect.left, y: at.y + rect.top };
+  };
+
   const controllers = createControllers({
     store,
     viewport: () => ({ x: world.size.width, y: world.size.height }),
@@ -65,6 +86,13 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
       const hex = world.screenToHex(at.x, at.y);
       return gridInBounds(store.state.grid, hex.q, hex.r) ? hex : null;
     },
+    screenToWorld: localToWorld,
+    view: () => ({
+      min: world.camera.toWorld(0, 0),
+      max: world.camera.toWorld(world.size.width, world.size.height),
+      scale: world.camera.scale,
+    }),
+    ping: (point, color) => world.pingUnits(point.x, point.y, color),
     onTroopsSent: target => {
       world.spawnFx('captureFlash', target, undefined);
       audio.play('march');
@@ -141,24 +169,55 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
         return;
       case 'tap':
         if (choosingSpawn()) pickSpawn(intent.at);
-        else controllers.tap(intent.at);
+        else controllers.tap(intent.at, intent.shift);
         return;
       case 'longPress':
         controllers.secondary(intent.at);
         return;
-      case 'cancel':
-        if (controllers.tool().kind === 'place') controllers.cancelTool();
+      case 'context':
+        if (choosingSpawn()) return;
+        if (controllers.tool().kind !== 'idle') controllers.cancelTool();
+        else controllers.units.context(localToWorld(intent.at), localToClient(intent.at));
+        return;
+      case 'boxStart':
+        if (!choosingSpawn()) controllers.units.boxStart(localToWorld(intent.at));
+        return;
+      case 'boxMove':
+        pointer = intent.at;
+        controllers.units.boxMove(localToWorld(intent.at));
+        return;
+      case 'boxEnd':
+        controllers.units.boxEnd(localToWorld(intent.at), intent.shift);
         return;
       case 'hover':
+        pointer = intent.at;
         controllers.setHover(localToHex(intent.at));
         return;
       case 'leave':
+        pointer = null;
         controllers.setHover(null);
         return;
       case 'panEnd':
         return;
       case 'key':
-        if (!choosingSpawn()) controllers.key(intent.key);
+        if (ARROWS[intent.key]) heldKeys.add(intent.key);
+        if (choosingSpawn()) return;
+        if (intent.key === 'f' || intent.key === 'F') {
+          const centre = controllers.units.centre();
+          if (centre) {
+            centreOnWorld(centre);
+            syncCameraMoved();
+          }
+          return;
+        }
+        controllers.key(intent.key, intent.shift);
+        return;
+      case 'keyUp':
+        heldKeys.delete(intent.key);
+        return;
+      case 'blur':
+        heldKeys.clear();
+        pointer = null;
         return;
     }
   };
@@ -167,8 +226,35 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
   let endedNotified = false;
   const matchAudio = createMatchAudio(store);
 
+  const scrollCamera = (dt: number): void => {
+    let dx = 0;
+    let dy = 0;
+    for (const key of heldKeys) {
+      const [x, y] = ARROWS[key]!;
+      dx += x;
+      dy += y;
+    }
+    if (pointer && !controllers.units.box() && !controllers.units.menu()) {
+      if (pointer.x < EDGE_PX) dx -= 1;
+      if (pointer.x > world.size.width - EDGE_PX) dx += 1;
+      if (pointer.y < EDGE_PX) dy -= 1;
+      if (pointer.y > world.size.height - EDGE_PX) dy += 1;
+    }
+    if (dx === 0 && dy === 0) return;
+    const step = SCROLL_PX_PER_SECOND * dt;
+    panBy(world.camera, -dx * step, -dy * step);
+    syncCameraMoved();
+  };
+
   const loop = createFrameLoop(dt => {
     store.step(dt);
+    scrollCamera(dt);
+    controllers.units.prune();
+    world.setUnitsView({
+      player: store.state.playerEmpire,
+      selected: controllers.units.selected(),
+      box: controllers.units.box(),
+    });
     matchAudio.update(dt);
 
     const tool = controllers.tool();

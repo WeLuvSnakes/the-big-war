@@ -13,6 +13,10 @@ const WHEEL_STEP = 1.0015;
 
 const PINCH_STEP = 0.006;
 
+const MOUSE_WHEEL_STEP = 50;
+
+const MOUSE_WHEEL_ZOOM = 1.15;
+
 export function attachInput(host: InputHost): () => void {
   const pointers = new Map<number, PointerState>();
   let pinchSpan = 0;
@@ -30,11 +34,11 @@ export function attachInput(host: InputHost): () => void {
   };
 
   const onPointerDown = (event: PointerEvent) => {
-    if (event.button !== 0) {
+    if (event.button !== 0 && event.button !== 2) {
       event.preventDefault();
-      if (event.button === 2) host.onIntent({ kind: 'cancel' });
       return;
     }
+    if (event.button === 2) event.preventDefault();
     const at = localPoint(event);
     const state: PointerState = {
       id: event.pointerId,
@@ -45,6 +49,9 @@ export function attachInput(host: InputHost): () => void {
       dragging: false,
       timer: null,
       consumed: false,
+      button: event.button,
+      box: event.button === 0 && event.pointerType === 'mouse',
+      shift: event.shiftKey,
     };
     pointers.set(event.pointerId, state);
     host.element.setPointerCapture?.(event.pointerId);
@@ -61,6 +68,8 @@ export function attachInput(host: InputHost): () => void {
       }
       return;
     }
+
+    if (event.pointerType === 'mouse') return;
 
     state.timer = setTimeout(() => {
       state.timer = null;
@@ -113,9 +122,12 @@ export function attachInput(host: InputHost): () => void {
     if (!state.dragging && travelled > DRAG_THRESHOLD) {
       state.dragging = true;
       clearTimer(state);
-      host.element.classList.add('is-dragging');
+      if (state.box) host.onIntent({ kind: 'boxStart', at: { x: state.startX, y: state.startY } });
+      else host.element.classList.add('is-dragging');
     }
-    if (state.dragging) host.onIntent({ kind: 'pan', dx, dy });
+    if (!state.dragging) return;
+    if (state.box) host.onIntent({ kind: 'boxMove', at });
+    else host.onIntent({ kind: 'pan', dx, dy });
   };
 
   const finish = (event: PointerEvent, cancelled: boolean) => {
@@ -130,6 +142,11 @@ export function attachInput(host: InputHost): () => void {
     if (cancelled) return;
     if (state.consumed) return;
 
+    if (state.dragging && state.box) {
+      host.onIntent({ kind: 'boxEnd', at: localPoint(event), shift: state.shift || event.shiftKey });
+      return;
+    }
+
     if (state.dragging) {
       if (pointers.size === 0) {
         host.element.classList.remove('is-dragging');
@@ -139,9 +156,9 @@ export function attachInput(host: InputHost): () => void {
     }
 
     const at = localPoint(event);
-    if (Math.hypot(at.x - state.startX, at.y - state.startY) <= DRAG_THRESHOLD) {
-      host.onIntent({ kind: 'tap', at });
-    }
+    if (Math.hypot(at.x - state.startX, at.y - state.startY) > DRAG_THRESHOLD) return;
+    if (state.button === 2) host.onIntent({ kind: 'context', at });
+    else host.onIntent({ kind: 'tap', at, shift: state.shift || event.shiftKey });
   };
 
   const onPointerUp = (event: PointerEvent) => finish(event, false);
@@ -152,19 +169,23 @@ export function attachInput(host: InputHost): () => void {
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
     const rect = host.element.getBoundingClientRect();
-    host.onIntent({
-      kind: 'zoom',
-      factor: Math.pow(WHEEL_STEP, -event.deltaY),
-      anchor: { x: event.clientX - rect.left, y: event.clientY - rect.top },
-    });
+    const anchor = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const mouseWheel =
+      event.deltaMode !== 0 || (event.deltaX === 0 && Number.isInteger(event.deltaY) && Math.abs(event.deltaY) >= MOUSE_WHEEL_STEP);
+    if (event.ctrlKey) host.onIntent({ kind: 'zoom', factor: Math.pow(WHEEL_STEP, -event.deltaY * 4), anchor });
+    else if (mouseWheel) host.onIntent({ kind: 'zoom', factor: event.deltaY < 0 ? MOUSE_WHEEL_ZOOM : 1 / MOUSE_WHEEL_ZOOM, anchor });
+    else host.onIntent({ kind: 'pan', dx: -event.deltaX, dy: -event.deltaY });
   };
   const onContextMenu = (event: MouseEvent) => event.preventDefault();
   const onKeyDown = (event: KeyboardEvent) => {
     
     const target = event.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-    host.onIntent({ kind: 'key', key: event.key });
+    if (event.key.startsWith('Arrow') || event.key === ' ') event.preventDefault();
+    host.onIntent({ kind: 'key', key: event.key, shift: event.shiftKey });
   };
+  const onKeyUp = (event: KeyboardEvent) => host.onIntent({ kind: 'keyUp', key: event.key });
+  const onBlur = () => host.onIntent({ kind: 'blur' });
 
   host.element.addEventListener('pointerdown', onPointerDown);
   host.element.addEventListener('pointermove', onPointerMove);
@@ -174,6 +195,8 @@ export function attachInput(host: InputHost): () => void {
   host.element.addEventListener('wheel', onWheel, { passive: false });
   window.addEventListener('contextmenu', onContextMenu);
   window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', onBlur);
 
   return () => {
     for (const state of pointers.values()) clearTimer(state);
@@ -186,5 +209,7 @@ export function attachInput(host: InputHost): () => void {
     host.element.removeEventListener('wheel', onWheel);
     window.removeEventListener('contextmenu', onContextMenu);
     window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('blur', onBlur);
   };
 }

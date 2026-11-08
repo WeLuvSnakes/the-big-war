@@ -1,5 +1,6 @@
 import type { Accessor } from 'solid-js';
 import type { ShipId } from '../game/ship/ship.types';
+import type { UnitControls } from './unit-controls.types';
 import type { ClientStore } from '../game/store/store.types';
 import type { BuildingKind } from '../game/building/building.types';
 import type { OffensiveId } from '../game/offensive/offensive.types';
@@ -25,6 +26,7 @@ export interface Controllers {
   readonly notices: Accessor<readonly CommandNotice[]>;
   readonly selectedShip: Accessor<ShipId | null>;
   readonly focusedOffensive: Accessor<OffensiveId | null>;
+  readonly units: UnitControls;
 
   selectHex(hex: Axial | null): void;
   selectShip(ship: ShipId | null): void;
@@ -36,14 +38,14 @@ export interface Controllers {
 
   hexAtScreen(at: Pixel): Axial | null;
 
-  tap(at: Pixel): void;
+  tap(at: Pixel, shift?: boolean): void;
 
   dragOver(client: Pixel): void;
   dropAt(client: Pixel): void;
   
   secondary(at: Pixel): void;
   
-  key(key: string): void;
+  key(key: string, shift?: boolean): void;
 
   run(command: Command, onDone?: (result: CommandResult) => void): void;
 
@@ -59,6 +61,12 @@ export interface ControllerDeps {
   readonly screenToHex: (at: Pixel) => Axial | null;
 
   readonly clientToHex: (at: Pixel) => Axial | null;
+
+  readonly screenToWorld: (at: Pixel) => Pixel;
+
+  readonly view: () => { readonly min: Pixel; readonly max: Pixel; readonly scale: number };
+
+  readonly ping: (world: Pixel, color: number) => void;
   
   readonly onTroopsSent?: (target: Axial) => void;
   

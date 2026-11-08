@@ -1,4 +1,6 @@
 import { audio } from '../audio/audio.service';
+import { createUnitControls } from './unit-controls';
+import { UNIT_KINDS, UNIT_STATS } from '../game/unit/unit.constants';
 import { clampPercent } from '@the-big-war/game-engine/math/math.service';
 
 
@@ -26,6 +28,8 @@ export type * from './controllers.types';
 let noticeId = 0;
 
 const SHIP_TAP_RADIUS = 1;
+
+const SHIFTED_DIGITS: Readonly<Record<string, string>> = { '!': '1', '@': '2', '#': '3', $: '4', '%': '5', '^': '6' };
 
 export function createControllers(deps: ControllerDeps): Controllers {
   const { store } = deps;
@@ -76,6 +80,8 @@ export function createControllers(deps: ControllerDeps): Controllers {
   };
 
   const hexAtScreen = (at: Pixel): Axial | null => deps.screenToHex(at);
+
+  const units = createUnitControls({ store, run, view: deps.view, ping: deps.ping });
 
   const own = (hex: Axial): boolean => gridAt(state().grid, hex)?.owner === player();
   const foreign = (hex: Axial): boolean => {
@@ -139,6 +145,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
 
   const cancelTool = () => {
     if (tool().kind !== 'idle') setTool({ kind: 'idle' });
+    else if (units.clear()) return;
     else if (focusedOffensive() !== null) setFocusedOffensive(null);
     else {
       setSelectedHex(null);
@@ -146,7 +153,8 @@ export function createControllers(deps: ControllerDeps): Controllers {
     }
   };
 
-  const tap = (at: Pixel) => {
+  const tap = (at: Pixel, shift = false) => {
+    units.closeMenu();
     const hex = hexAtScreen(at);
     if (!hex) {
       setSelectedHex(null);
@@ -180,6 +188,8 @@ export function createControllers(deps: ControllerDeps): Controllers {
       setFocusedOffensive(null);
     }
 
+    if (units.tap(deps.screenToWorld(at), shift)) return;
+
     if (tapShip(hex)) return;
 
     if (own(hex)) {
@@ -199,7 +209,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
     setSelectedHex(hex);
   };
 
-  const key = (pressed: string) => {
+  const key = (pressed: string, shift = false) => {
     if (pressed === 'Escape') {
       cancelTool();
       return;
@@ -208,9 +218,9 @@ export function createControllers(deps: ControllerDeps): Controllers {
       store.setPaused(!store.paused());
       return;
     }
-    if (pressed === '1') store.setSpeed(1);
-    if (pressed === '2') store.setSpeed(2);
-    if (pressed === '4') store.setSpeed(4);
+    const digit = SHIFTED_DIGITS[pressed] ?? pressed;
+    const kind = UNIT_KINDS.find(item => UNIT_STATS[item].hotkey === digit);
+    if (kind) units.selectKind(kind, shift);
   };
 
   return {
@@ -222,6 +232,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
     selectedShip,
     focusedOffensive,
     focusOffensive: setFocusedOffensive,
+    units,
     selectHex,
     selectShip: setSelectedShip,
     setHover: setHoverHex,
