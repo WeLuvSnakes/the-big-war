@@ -1,3 +1,4 @@
+import { unitCommands } from './bot-units.service';
 import type { Bot, BotOptions } from './bot.types';
 import { BOT_PERSONALITIES } from './bot.constants';
 import type { GameState } from '../state/state.types';
@@ -40,6 +41,7 @@ export function botTick(bot: Bot, state: GameState, dt: number): Command[] {
   if (!defence.building) commands.push(...constructionCommands(bot, state, empire));
   commands.push(...trenchCommands(bot, state, empire));
   commands.push(...fleetCommands(bot, state, empire));
+  commands.push(...unitCommands(bot, state, empire));
 
   const cannon = cannonCommand(bot, state, empire);
   if (cannon) commands.push(cannon);

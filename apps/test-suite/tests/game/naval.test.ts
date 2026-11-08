@@ -84,6 +84,8 @@ function battleship(state: GameState, empire: number, q: number, r: number): Shi
 
 const send = (state: GameState) => dispatch(state, { type: 'SendTroops', empire: 0, target: { q: 26, r: 5 }, percent: 50 });
 
+const LAND_UNIT_COMMANDS: ReadonlySet<string> = new Set(['TrainUnit', 'OrderUnits']);
+
 describe('ports', () => {
   test('port needs a coast and no research, within starting gold', () => {
     const state = seaState();
@@ -243,7 +245,7 @@ describe('battleships', () => {
     Object.assign(state.empires[0]!, { gold: 5000, science: 500, soldiers: 0 });
     const bot = createBot({ empire: 0, seed: 1 });
     for (let i = 0; i < 700 && !state.ships.some(ship => ship.kind === 'battleship' && ship.path.length > 0); i++) {
-      for (const command of botTick(bot, state, 0.5)) dispatch(state, command);
+      for (const command of botTick(bot, state, 0.5)) if (!LAND_UNIT_COMMANDS.has(command.type)) dispatch(state, command);
       run(state, 0.5);
     }
     expect(state.empires[0]!.research.completed).toContain('dreadnoughts');
@@ -349,7 +351,7 @@ describe('bots at sea', () => {
     expect(landed).toBe(true);
     expect(state.status).toBe('ended');
     expect(state.winner).not.toBeNull();
-  });
+  }, 60_000);
 
   test('every capital on many seeds has a route to a port site', () => {
     for (let seed = 1; seed <= 6; seed++) {

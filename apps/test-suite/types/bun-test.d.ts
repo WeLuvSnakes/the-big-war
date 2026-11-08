@@ -1,7 +1,7 @@
 
 
 declare module 'bun:test' {
-  export type TestFn = (name: string, fn: () => void | Promise<void>) => void;
+  export type TestFn = (name: string, fn: () => void | Promise<void>, timeout?: number) => void;
 
   export const test: TestFn;
   export const it: TestFn;
