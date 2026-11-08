@@ -1,0 +1,65 @@
+.unit-menu,
+.unit-menu-list {
+  position: fixed;
+  z-index: 40;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--street-border);
+  border-radius: var(--street-radius);
+  background: var(--street-chrome);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  font-family: var(--street-font);
+  color: var(--street-text);
+}
+
+.unit-menu-head {
+  padding: 3px 8px 4px;
+  color: var(--street-muted);
+  font-size: 11px;
+}
+
+.unit-menu button {
+  appearance: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--street-radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.unit-menu button:hover {
+  background: var(--street-hover);
+}
+
+.unit-menu small {
+  color: var(--street-muted);
+}
+
+.unit-menu-sub {
+  position: relative;
+}
+
+.unit-menu-list {
+  position: absolute;
+  top: -5px;
+  left: 100%;
+  display: none;
+  min-width: 140px;
+}
+
+.unit-menu.is-flipped .unit-menu-list {
+  left: auto;
+  right: 100%;
+}
+
+.unit-menu-sub.is-open > .unit-menu-list {
+  display: block;
+}

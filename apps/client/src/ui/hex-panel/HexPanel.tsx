@@ -299,7 +299,7 @@ export const HexPanel = (props: HexPanelProps) => {
 
             <Show when={attackFrom() && isForeign()}>
               <span class="kit-note">
-                Click foreign land to attack, drag to move the map.
+                Click foreign land to attack, right-drag or use the arrow keys to move the map.
                 <Show when={distance(attackFrom()!, hex()!) === 1}> ✓</Show>
               </span>
             </Show>

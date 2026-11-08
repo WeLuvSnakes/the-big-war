@@ -1,4 +1,5 @@
 import type { Terrain } from '../game/map/map.types';
+import type { Formation } from '../game/unit/unit.types';
 import type { BuildingKind } from '../game/building/building.types';
 import type { CommandError } from '../game/commands/commands.types';
 
@@ -21,6 +22,17 @@ const BUILDING_LABELS: Readonly<Record<BuildingKind, string>> = {
   tank: 'Tank',
   factory: 'Factory',
 };
+
+const FORMATION_LABELS: Readonly<Record<Formation, string>> = {
+  wedge: 'Wedge',
+  column: 'Column',
+  file: 'File',
+  vee: 'Vee',
+};
+
+export function formationLabel(formation: Formation): string {
+  return FORMATION_LABELS[formation];
+}
 
 export function buildingLabel(kind: BuildingKind): string {
   return BUILDING_LABELS[kind];

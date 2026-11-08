@@ -1,0 +1,51 @@
+.unit-bar {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: min(720px, calc(100vw - 32px));
+  padding: 6px 10px;
+  transform: translateX(-50%);
+  border: 1px solid var(--street-border);
+  border-radius: var(--street-radius);
+  background: var(--street-chrome);
+  color: var(--street-text);
+  font-family: var(--street-font);
+  font-size: 12px;
+}
+
+.unit-bar-pop {
+  color: var(--street-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.unit-bar-chip {
+  appearance: none;
+  padding: 3px 8px;
+  border: 1px solid var(--street-border);
+  border-radius: var(--street-radius);
+  background: var(--street-well);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.unit-bar-chip:hover {
+  border-color: var(--street-border-hover);
+}
+
+.unit-bar-chip kbd {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 10px;
+}
+
+.unit-bar-hint {
+  color: var(--street-muted);
+  font-size: 11px;
+}

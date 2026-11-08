@@ -2,9 +2,11 @@ import './Shell.css';
 import { Hud } from '../hud/Hud';
 import { errorLabel } from '../text';
 import { Hotbar } from '../hotbar/Hotbar';
+import { UnitBar } from '../unit-bar/UnitBar';
 import { AboutView } from '../about/AboutView';
 import { VOID_COLOR } from '../../render/theme';
 import { HexPanel } from '../hex-panel/HexPanel';
+import { UnitMenu } from '../unit-menu/UnitMenu';
 import { audio } from '../../audio/audio.service';
 import { ArmyPanel } from '../army-panel/ArmyPanel';
 import { EndScreen } from '../end-screen/EndScreen';
@@ -21,6 +23,7 @@ import { gameStore, live } from '../../game/store/store.service';
 import { DiplomacyPanel } from '../diplomacy-panel/DiplomacyPanel';
 import { createWorld, type WorldRenderer } from '../../render/world';
 import { offensivesOf } from '../../game/offensive/offensive.service';
+import { ProductionPanel } from '../production-panel/ProductionPanel';
 import { Rail, RailAction } from '@the-big-war/frontend/ui/rail/Rail';
 import type { BuildingKind } from '../../game/building/building.types';
 import { pendingOffersTo } from '../../game/diplomacy/diplomacy.service';
@@ -157,6 +160,12 @@ export const Shell = () => {
     return cell?.owner === store.state.playerEmpire && cell.building?.kind === 'port';
   });
 
+  const ownProducerSelected = live(() => {
+    const hex = runtime()?.controllers.selectedHex();
+    const cell = hex ? gridAt(store.state.grid, hex) : null;
+    const kind = cell?.building?.kind;
+    return cell?.owner === store.state.playerEmpire && (kind === 'barracks' || kind === 'factory');
+  });
   const showingMatch = () => flow.screen() === 'match' || flow.screen() === 'end';
 
   return (
@@ -259,9 +268,14 @@ export const Shell = () => {
         <Show when={ownPortSelected() && runtime()}>
           {active => <HexPanel controllers={active().controllers} onClose={() => active().controllers.selectHex(null)} />}
         </Show>
+        <Show when={ownProducerSelected() && runtime()}>
+          {active => <ProductionPanel controllers={active().controllers} onClose={() => active().controllers.selectHex(null)} />}
+        </Show>
         <Show when={runtime()}>
           {active => (
             <>
+              <UnitBar controllers={active().controllers} />
+              <UnitMenu controllers={active().controllers} />
               <div class="hud-bottom-row">
                 <Hotbar
                   controllers={active().controllers}
