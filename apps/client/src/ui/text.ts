@@ -86,6 +86,8 @@ const ERROR_LABELS: Readonly<Record<CommandError, string>> = {
   port_busy: 'All boats from your port are at sea',
   blockaded: 'Port is blockaded',
   no_sea_route: 'No sea route from your ports',
+  unit_limit: 'Unit limit reached: build more barracks or factories',
+  queue_full: 'Production queue is full',
   stale_match: 'That order belonged to the last match',
 };
 

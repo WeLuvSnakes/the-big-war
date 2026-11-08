@@ -1,4 +1,5 @@
 import { stepShips } from './systems/ships.system';
+import { stepUnits } from './systems/units.system';
 import type { GameState } from '../state/state.types';
 import { stepEconomy } from './systems/economy.system';
 import { stepResearch } from './systems/research.system';
@@ -21,6 +22,7 @@ export const GAME_SYSTEMS: readonly System<GameState>[] = [
   stepArtillery,
   stepShips,
   stepOffensives,
+  stepUnits,
   stepHousekeeping,
   checkWinConditions,
 ];

@@ -3,6 +3,7 @@ import type { EmpireId } from '../empire/empire.types';
 import type { GameSpeed } from '../config/config.types';
 import type { BuildingKind } from '../building/building.types';
 import type { OffensiveId } from '../offensive/offensive.types';
+import type { UnitId, UnitKind, UnitOrder } from '../unit/unit.types';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import type { CommandOutcome, CommandLogEntry as EngineCommandLogEntry } from '@the-big-war/game-engine/commands/command.types';
 
@@ -30,6 +31,8 @@ export type CommandError =
   | 'port_busy'
   | 'blockaded'
   | 'no_sea_route'
+  | 'unit_limit'
+  | 'queue_full'
   | 'stale_match';
 
 export interface SendTroopsCommand {
@@ -93,6 +96,26 @@ export interface TrenchAttackCommand {
   readonly hex: Axial;
   readonly target: Axial;
   readonly percent: number;
+}
+
+export interface TrainUnitCommand {
+  readonly type: 'TrainUnit';
+  readonly empire: EmpireId;
+  readonly hex: Axial;
+  readonly kind: UnitKind;
+}
+
+export interface CancelUnitCommand {
+  readonly type: 'CancelUnit';
+  readonly empire: EmpireId;
+  readonly hex: Axial;
+}
+
+export interface OrderUnitsCommand {
+  readonly type: 'OrderUnits';
+  readonly empire: EmpireId;
+  readonly units: readonly UnitId[];
+  readonly order: UnitOrder;
 }
 
 export interface BuildShipCommand {
@@ -180,6 +203,9 @@ export type Command =
   | LeaveTrenchCommand
   | TrenchAttackCommand
   | FireCannonCommand
+  | TrainUnitCommand
+  | CancelUnitCommand
+  | OrderUnitsCommand
   | BuildShipCommand
   | OrderShipCommand
   | StartResearchCommand

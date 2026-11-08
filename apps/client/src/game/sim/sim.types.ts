@@ -6,6 +6,7 @@ import type { Walker } from '../building/building.types';
 import type { Offensive } from '../offensive/offensive.types';
 import type { GameState, EndReason } from '../state/state.types';
 import type { Command, CommandResult } from '../commands/commands.types';
+import type { ProductionQueue, Unit, UnitEvent } from '../unit/unit.types';
 import type { MatchStatus } from '@the-big-war/game-engine/simulation/simulation.types';
 
 export type OffensiveView = Omit<Offensive, 'frontier' | 'queued'>;
@@ -30,6 +31,11 @@ export interface FrameMessage {
   readonly nextOffensiveId: number;
   readonly nextShipId: number;
   readonly nextBuildingId: number;
+  readonly nextUnitId: number;
+  readonly nextUnitEventId: number;
+  readonly units: readonly Unit[];
+  readonly production: readonly ProductionQueue[];
+  readonly unitEvents: readonly UnitEvent[];
   readonly tiles: Float64Array<ArrayBuffer>;
   readonly buildings: Float64Array<ArrayBuffer>;
   readonly gatherers: Float64Array<ArrayBuffer>;

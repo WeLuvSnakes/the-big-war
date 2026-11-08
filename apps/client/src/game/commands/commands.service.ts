@@ -4,6 +4,7 @@ import type { Command, CommandResult } from './commands.types';
 import { handleStartResearch } from './handlers/research.handler';
 import { handleBuildShip, handleOrderShip } from './handlers/ship.handler';
 import { createDispatcher } from '@the-big-war/game-engine/commands/command.service';
+import { handleCancelUnit, handleOrderUnits, handleTrainUnit } from './handlers/unit.handler';
 import { handleLeaveTrench, handleManTrench, handleTrenchAttack } from './handlers/trench.handler';
 import { handleOrderOffensive, handleRecallOffensive, handleSendTroops } from './handlers/troops.handler';
 import {
@@ -30,6 +31,9 @@ export const dispatch = createDispatcher<GameState, Command, CommandResult>({
   LeaveTrench: handleLeaveTrench,
   TrenchAttack: handleTrenchAttack,
   FireCannon: handleFireCannon,
+  TrainUnit: handleTrainUnit,
+  CancelUnit: handleCancelUnit,
+  OrderUnits: handleOrderUnits,
   BuildShip: handleBuildShip,
   OrderShip: handleOrderShip,
   StartResearch: handleStartResearch,

@@ -1,4 +1,5 @@
 import type { Ship } from '../ship/ship.types';
+import { UNIT_TUNING } from '../unit/unit.constants';
 import type { GameState } from '../state/state.types';
 import { rebuildShipHash } from '../ship/ship.service';
 import { createBaseState } from '../state/state.service';
@@ -127,6 +128,11 @@ export function encodeFrame(state: GameState, paused: boolean, paths: ShipPaths)
     nextOffensiveId: state.nextOffensiveId,
     nextShipId: state.nextShipId,
     nextBuildingId: state.nextBuildingId,
+    nextUnitId: state.nextUnitId,
+    nextUnitEventId: state.nextUnitEventId,
+    units: state.units,
+    production: state.production,
+    unitEvents: state.unitEvents.splice(0),
     tiles: encodeTiles(state),
     ...encodeBuildings(state),
     empires: state.empires,
@@ -294,6 +300,12 @@ export function applyFrame(state: GameState, frame: FrameMessage): void {
   state.nextOffensiveId = frame.nextOffensiveId;
   state.nextShipId = frame.nextShipId;
   state.nextBuildingId = frame.nextBuildingId;
+  state.nextUnitId = frame.nextUnitId;
+  state.nextUnitEventId = frame.nextUnitEventId;
+  state.units = frame.units.map(unit => ({ ...unit }));
+  state.production = frame.production.map(line => ({ ...line, queue: [...line.queue] }));
+  state.unitEvents.push(...frame.unitEvents);
+  if (state.unitEvents.length > UNIT_TUNING.maxEvents) state.unitEvents.splice(0, state.unitEvents.length - UNIT_TUNING.maxEvents);
   applyTiles(state, frame.tiles);
   applyBuildings(state, frame.buildings, frame.gatherers);
   frame.empires.forEach((empire, at) => {
