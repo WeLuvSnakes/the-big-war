@@ -420,6 +420,10 @@ function createAudio() {
       lastPlayed.set(sound, now);
       SFX[sound](sfxTarget);
     },
+    sfxTarget(): SfxTarget | null {
+      if (!context || !sfxTarget || !sfxOn() || context.state !== 'running') return null;
+      return sfxTarget;
+    },
     setMood(next: Mood): void {
       if (next === mood) return;
       mood = next;

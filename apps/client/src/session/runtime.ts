@@ -3,6 +3,7 @@ import { ownerColor } from '../render/theme';
 import { audio } from '../audio/audio.service';
 import { createControllers } from './controllers';
 import type { Camera } from '../render/world.types';
+import { createUnitAudio } from '../audio/unit-audio';
 import { createMatchAudio } from '../audio/match-audio';
 import { panBy } from '@the-big-war/frontend/session/camera';
 import type { SpawnPlot } from '../render/overlay-layer.types';
@@ -225,6 +226,7 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
   let detach: (() => void) | null = null;
   let endedNotified = false;
   const matchAudio = createMatchAudio(store);
+  const unitAudio = createUnitAudio(store);
 
   const scrollCamera = (dt: number): void => {
     let dx = 0;
@@ -256,6 +258,12 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
       box: controllers.units.box(),
     });
     matchAudio.update(dt);
+    unitAudio.update({
+      min: world.camera.toWorld(0, 0),
+      max: world.camera.toWorld(world.size.width, world.size.height),
+      scale: world.camera.scale,
+      paused: store.paused(),
+    });
 
     const tool = controllers.tool();
     const hover = controllers.hoverHex();
@@ -309,6 +317,7 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
     },
     stop(): void {
       loop.stop();
+      unitAudio.stop();
       detach?.();
       detach = null;
     },
