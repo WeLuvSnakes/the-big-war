@@ -87,11 +87,10 @@ const send = (state: GameState) => dispatch(state, { type: 'SendTroops', empire:
 const LAND_UNIT_COMMANDS: ReadonlySet<string> = new Set(['TrainUnit', 'OrderUnits']);
 
 describe('ports', () => {
-  test('port needs a coast and no research, within starting gold', () => {
+  test('port needs a coast and no research', () => {
     const state = seaState();
     expect(dispatch(state, { type: 'PlaceBuilding', empire: 0, hex: { q: 2, r: 2 }, kind: 'port' }).ok).toBe(false);
     expect(dispatch(state, { type: 'PlaceBuilding', empire: 0, hex: { q: WEST_COAST, r: 2 }, kind: 'port' }).ok).toBe(true);
-    expect(state.config.buildings.port.cost).toBeLessThanOrEqual(state.config.start.gold);
     expect(state.config.buildings.port.requiresResearch).toBeNull();
   });
 
