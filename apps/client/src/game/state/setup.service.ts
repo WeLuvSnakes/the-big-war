@@ -123,7 +123,10 @@ export function createInitialState(baseConfig: GameConfig): GameState {
 
   const capitals = chooseCapitals(grid, labels, mapRng, config.start.empireCount, neutralStateCount(config));
   const sites = state.empires.map((_, id) => capitals[id] ?? null);
-  if (config.start.pickSpawns) state.spawnSites = sites;
+  if (config.start.pickSpawns) {
+    sites[state.playerEmpire] = null;
+    state.spawnSites = sites;
+  }
   else claimSites(state, sites);
 
   pruneLoneMountains(grid);

@@ -38,11 +38,13 @@ describe('spawn phase', () => {
   test('nobody owns land until the spawn is confirmed', () => {
     const state = picking();
     expect(state.grid.cells.every(cell => cell.owner < 0 && !cell.building)).toBe(true);
+    expect(state.spawnSites[0]).toBeNull();
     expect(state.spawnSites.filter(Boolean).length).toBeGreaterThan(1);
     step(state, 5);
     expect(state.elapsed).toBe(0);
     expect(state.empires.every(empire => empire.alive)).toBe(true);
 
+    expect(state.grid.cells.some(cell => dispatch(state, { type: 'ChooseSpawn', empire: 0, target: { q: cell.q, r: cell.r } }).ok)).toBe(true);
     expect(dispatch(state, { type: 'ConfirmSpawn' }).ok).toBe(true);
     expect(state.spawnSites).toEqual([]);
     expect(owned(state, 0)).toBeGreaterThan(0);

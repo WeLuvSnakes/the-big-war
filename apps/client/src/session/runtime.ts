@@ -23,6 +23,7 @@ const clampAxis = (value: number, mapExtent: number, viewExtent: number): number
 };
 
 const HOME_TILE_PX = 12;
+const CITY_TILE_PX = 96;
 const LEFT_RAIL_PX = 72;
 const VIEW_EPSILON = 0.5;
 const SCALE_EPSILON = 0.001;
@@ -125,6 +126,25 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
       count++;
     }
     return count === 0 ? null : { x: sumX / count, y: sumY / count };
+  };
+
+  const zoomToCity = () => {
+    const point = empireCentroid(store.state.playerEmpire);
+    if (!point) {
+      runtime.fillScreenFromLeft();
+      return;
+    }
+    const { grid, config } = store.state;
+    const mapWidth = grid.width * config.map.hexSize;
+    const mapHeight = grid.height * config.map.hexSize;
+    world.camera.set({ scale: CITY_TILE_PX / config.map.hexSize });
+    centreOnWorld(point);
+    const zoom = world.camera.scale;
+    world.camera.set({
+      x: clampAxis(world.camera.x, mapWidth, world.size.width / zoom),
+      y: clampAxis(world.camera.y, mapHeight, world.size.height / zoom),
+    });
+    rememberHomeView();
   };
 
   const pickSpawn = (at: Pixel) => {
@@ -307,7 +327,7 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
       setChoosingSpawn(false);
       controllers.run({ type: 'ConfirmSpawn' }, () => {
         store.setPaused(false);
-        runtime.fillScreenFromLeft();
+        zoomToCity();
       });
     },
     start(): void {
