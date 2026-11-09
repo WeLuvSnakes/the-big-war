@@ -37,6 +37,15 @@ export const ProductionPanel = (props: ProductionPanelProps) => {
     const kind = current?.queue[0];
     return current && kind ? Math.min(1, current.progress / UNIT_STATS[kind].trainSeconds) : 0;
   };
+  const batches = () => {
+    const runs: { kind: UnitKind; count: number }[] = [];
+    for (const kind of line()?.queue ?? []) {
+      const last = runs[runs.length - 1];
+      if (last && last.kind === kind) last.count += 1;
+      else runs.push({ kind, count: 1 });
+    }
+    return runs;
+  };
   const train = (kind: UnitKind) => {
     const selected = hex();
     if (selected) props.controllers.run({ type: 'TrainUnit', empire: player(), hex: selected, kind });
@@ -71,19 +80,32 @@ export const ProductionPanel = (props: ProductionPanelProps) => {
           </For>
         </div>
         <div class="production-queue">
-          <Show when={(line()?.queue.length ?? 0) > 0} fallback={<span class="kit-note">Nothing in training</span>}>
-            <div class="kit-row">
-              <span class="kit-note">Training {UNIT_STATS[line()!.queue[0]!].name}</span>
-              <div class="production-bar">
-                <div class="production-bar-fill" style={{ width: `${Math.round(progress() * 100)}%` }} />
-              </div>
-            </div>
-            <div class="kit-row">
-              <For each={line()!.queue}>{kind => <span class="production-chip">{UNIT_STATS[kind].name}</span>}</For>
+          <div class="production-queue-head">
+            <span class="kit-note">Queue · {line()?.queue.length ?? 0}</span>
+            <Show when={(line()?.queue.length ?? 0) > 0}>
               <button type="button" class="kit-button is-ghost" onClick={cancel}>
                 Cancel last
               </button>
-            </div>
+            </Show>
+          </div>
+          <Show when={batches().length > 0} fallback={<span class="kit-note">Nothing in training</span>}>
+            <ol class="production-list">
+              <For each={batches()}>
+                {(batch, index) => (
+                  <li class="production-entry" classList={{ 'is-active': index() === 0 }}>
+                    <div class="production-entry-row">
+                      <span>{UNIT_STATS[batch.kind].name}</span>
+                      <span class="kit-num">×{batch.count}</span>
+                    </div>
+                    <Show when={index() === 0}>
+                      <div class="production-bar">
+                        <div class="production-bar-fill" style={{ width: `${Math.round(progress() * 100)}%` }} />
+                      </div>
+                    </Show>
+                  </li>
+                )}
+              </For>
+            </ol>
           </Show>
         </div>
       </Show>
