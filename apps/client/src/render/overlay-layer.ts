@@ -30,9 +30,11 @@ export class OverlayLayer {
     this.container.addChild(this.gfx);
   }
 
-  draw(state: OverlayState, hexSize: number): void {
+  draw(state: OverlayState, hexSize: number, focusHexes: readonly Axial[] = [], now = 0): void {
     const g = this.gfx;
     g.clear();
+
+    if (focusHexes.length > 0) this.drawFocus(g, focusHexes, hexSize, now);
 
     for (const plot of state.spawnPlots) this.drawSpawnPlot(g, plot, hexSize);
 
@@ -49,6 +51,14 @@ export class OverlayLayer {
       this.drawRangeRing(g, state.cannonFrom, state.cannonRange, hexSize);
       if (state.cannonTarget) this.drawReticle(g, state.cannonTarget, hexSize);
     }
+  }
+
+  private drawFocus(g: Graphics, hexes: readonly Axial[], hexSize: number, now: number): void {
+    const pulse = 0.5 + 0.5 * Math.sin(now / 180);
+    for (const hex of hexes) g.poly(hexPolygon(axialToPixel(hex, hexSize), hexSize * 0.98));
+    g.fill({ color: SELECTION_COLOR, alpha: 0.15 + 0.15 * pulse });
+    for (const hex of hexes) g.poly(hexPolygon(axialToPixel(hex, hexSize), hexSize * 0.98));
+    g.stroke({ width: SELECTION_WIDTH, color: SELECTION_COLOR, alpha: 0.6 + 0.4 * pulse });
   }
 
   private drawSpawnPlot(g: Graphics, plot: SpawnPlot, hexSize: number): void {

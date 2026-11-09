@@ -271,6 +271,7 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
     world.setOverlay({
       selected: controllers.selectedHex(),
       selectedShip: controllers.selectedShip(),
+      focusedOffensive: controllers.focusedOffensive(),
       hovered: placing ? hover : null,
       ghost:
         placing && hover
