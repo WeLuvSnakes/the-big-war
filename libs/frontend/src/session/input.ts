@@ -109,6 +109,7 @@ export function attachInput(host: InputHost): () => void {
       return;
     }
 
+    if (state.box && !state.dragging && (event.buttons & 3) === 3) state.box = false;
     const dx = at.x - state.lastX;
     const dy = at.y - state.lastY;
     const travelled = Math.hypot(at.x - state.startX, at.y - state.startY);
