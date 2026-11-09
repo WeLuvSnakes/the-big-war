@@ -222,3 +222,11 @@
 .kit-result-outcome.is-defeat {
   color: var(--street-danger);
 }
+
+.nitro-sidebar,
+.hud-top,
+.hud-bottom-row,
+.unit-bar,
+.deploy-slider-dock {
+  zoom: 0.8;
+}
