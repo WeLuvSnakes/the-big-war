@@ -5,7 +5,7 @@ import { barracksTier } from '../../building/building.service';
 import { garrisonedTroops } from '../../trench/trench.service';
 import { allBuildingCells, populationWeight } from '../../map/world-index.service';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
-import { addToEncampments, deployedTroops, killExcessTroops, troopCapacity } from '../../troops/troops.service';
+import { addToEncampments, deployedTroops, killExcessTroops, recruitCapacity } from '../../troops/troops.service';
 
 export function stepRecruitment(state: GameState, dt: number): void {
   const recruit = state.config.recruit;
@@ -71,7 +71,7 @@ export function draftCapOf(state: GameState, empire: Empire, cap: number): numbe
 }
 
 export function reserveCapOf(state: GameState, empire: Empire): number {
-  return Math.max(0, Math.floor(troopCapacity(state, empire.id)));
+  return Math.max(0, Math.floor(recruitCapacity(state, empire.id)));
 }
 
 interface BarracksOutput {

@@ -35,6 +35,16 @@ export function troopCapacity(state: GameState, empire: EmpireId): number {
   return total;
 }
 
+export function recruitCapacity(state: GameState, empire: EmpireId): number {
+  let total = 0;
+  for (const cell of buildingCellsOf(state, empire)) {
+    const building = cell.building;
+    if (!building || !isHousing(building)) continue;
+    total += building.kind === 'trench' ? building.garrison : encampmentCapacity(state, empire, building);
+  }
+  return total;
+}
+
 export function addToEncampments(state: GameState, empire: EmpireId, troops: number, except?: Building): void {
   const owner = state.empires[empire];
   if (!owner || !owner.alive || troops <= 0) return;
