@@ -13,10 +13,6 @@ const WHEEL_STEP = 1.0015;
 
 const PINCH_STEP = 0.006;
 
-const MOUSE_WHEEL_STEP = 50;
-
-const MOUSE_WHEEL_ZOOM = 1.15;
-
 export function attachInput(host: InputHost): () => void {
   const pointers = new Map<number, PointerState>();
   let pinchSpan = 0;
@@ -170,11 +166,8 @@ export function attachInput(host: InputHost): () => void {
     event.preventDefault();
     const rect = host.element.getBoundingClientRect();
     const anchor = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    const mouseWheel =
-      event.deltaMode !== 0 || (event.deltaX === 0 && Number.isInteger(event.deltaY) && Math.abs(event.deltaY) >= MOUSE_WHEEL_STEP);
-    if (event.ctrlKey) host.onIntent({ kind: 'zoom', factor: Math.pow(WHEEL_STEP, -event.deltaY * 4), anchor });
-    else if (mouseWheel) host.onIntent({ kind: 'zoom', factor: event.deltaY < 0 ? MOUSE_WHEEL_ZOOM : 1 / MOUSE_WHEEL_ZOOM, anchor });
-    else host.onIntent({ kind: 'pan', dx: -event.deltaX, dy: -event.deltaY });
+    const step = event.ctrlKey ? -event.deltaY * 4 : -event.deltaY * (event.deltaMode === 0 ? 1 : 33);
+    host.onIntent({ kind: 'zoom', factor: Math.pow(WHEEL_STEP, step), anchor });
   };
   const onContextMenu = (event: MouseEvent) => event.preventDefault();
   const onKeyDown = (event: KeyboardEvent) => {
