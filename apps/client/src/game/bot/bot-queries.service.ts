@@ -1,13 +1,18 @@
 import { BOT_TUNING } from './bot.constants';
+import type { Unit } from '../unit/unit.types';
 import type { HexCell } from '../map/map.types';
+import { UNIT_STATS } from '../unit/unit.constants';
 import { seaIndex } from '../ship/sea-route.service';
+import type { Empire } from '../empire/empire.types';
 import type { GameState } from '../state/state.types';
 import type { EmpireId } from '../empire/empire.types';
 import { hasUnlock } from '../research/research.service';
 import { NEUTRAL_OWNER } from '../empire/empire.constants';
 import type { BuildingKind } from '../building/building.types';
 import type { Bot, CannonShot, HostileEdge } from './bot.types';
+import { cellAtPixel, hostileUnits } from '../unit/unit.service';
 import { GATHERED_TERRAIN } from '../building/building.constants';
+import { isProductionBuilding } from '../building/building.service';
 import { clamp01 } from '@the-big-war/game-engine/math/math.service';
 import { isPortSite, portWaterBody } from '../map/port-site.service';
 import { canAttack, getRelation } from '../diplomacy/diplomacy.service';
@@ -170,7 +175,7 @@ export function hasFreeBoat(state: GameState, empireId: EmpireId): boolean {
   );
 }
 
-export function overseasTarget(state: GameState, empireId: EmpireId): Axial | null {
+export function overseasTarget(state: GameState, empireId: EmpireId, skip: (hex: Axial) => boolean = () => false): Axial | null {
   const ports = finishedPorts(state, empireId);
   const home = ports[0];
   if (!home) return null;
@@ -178,6 +183,8 @@ export function overseasTarget(state: GameState, empireId: EmpireId): Axial | nu
   const index = seaIndex(state.grid, state.map);
   let best: Axial | null = null;
   let bestScore = Infinity;
+  let hostile: Axial | null = null;
+  let hostileScore = Infinity;
   for (const body of new Set(ports.map(port => portWaterBody(state.grid, state.map, port)))) {
     const coast = index.coastByBody.get(body) ?? [];
     const stride = Math.max(1, Math.floor(coast.length / MAX_COAST_SAMPLES));
@@ -185,13 +192,21 @@ export function overseasTarget(state: GameState, empireId: EmpireId): Axial | nu
       const cell = state.grid.cells[coast[at]!.beach]!;
       if (cell.owner === empireId || !isPassable(cell.terrain)) continue;
       if (cell.owner === NEUTRAL_OWNER ? !neutralAllowed : !atWar(state, empireId, cell.owner)) continue;
+      if (skip(cell)) continue;
       const score = distance(home, cell);
+      if (cell.owner !== NEUTRAL_OWNER) {
+        if (score < hostileScore) {
+          hostile = { q: cell.q, r: cell.r };
+          hostileScore = score;
+        }
+        continue;
+      }
       if (score >= bestScore) continue;
       best = { q: cell.q, r: cell.r };
       bestScore = score;
     }
   }
-  return best;
+  return best ?? hostile;
 }
 
 export function hostileWaters(state: GameState, empireId: EmpireId, body: number): Axial | null {
@@ -219,4 +234,92 @@ export function hostileEdges(state: GameState, empireId: EmpireId): HostileEdge[
     }
   }
   return edges;
+}
+
+export interface Workforce {
+  readonly jobs: number;
+  readonly spare: number;
+}
+
+export function workforce(state: GameState, empire: Empire): Workforce {
+  let jobs = 0;
+  for (const cell of buildingCellsOf(state, empire.id)) {
+    if (cell.building && isProductionBuilding(cell.building.kind)) jobs += state.config.economy.workersPerBuilding;
+  }
+  return { jobs, spare: empire.civilians - jobs };
+}
+
+export function incomeEstimate(state: GameState, empire: Empire): number {
+  let gathered = 0;
+  for (const cell of buildingCellsOf(state, empire.id)) {
+    const building = cell.building;
+    if (!building || building.buildRemaining > 0) continue;
+    if (building.kind === 'lumberjack') gathered += BOT_TUNING.gathererGoldPerSecond;
+    else if (building.kind === 'miner') gathered += BOT_TUNING.minerGoldPerSecond;
+  }
+  return Math.max(0, empire.goldBalance) + gathered;
+}
+
+export function armyShare(bot: Bot, state: GameState, empire: Empire): number {
+  const boom = Math.min(1, Math.max(BOT_TUNING.boomFloor, incomeEstimate(state, empire) / BOT_TUNING.boomIncome));
+  return bot.skill.armyShare * boom;
+}
+
+export function unitPower(unit: Unit): number {
+  const stats = UNIT_STATS[unit.kind];
+  const weapon = stats.weapon;
+  const dps = (weapon.damage * weapon.accuracy) / weapon.cooldown;
+  const armour = 1 / Math.max(0.1, 1 - stats.armor);
+  return Math.sqrt(unit.hp * armour * dps);
+}
+
+export function armyPower(units: readonly Unit[]): number {
+  return units.reduce((sum, unit) => sum + unitPower(unit), 0);
+}
+
+export function hostileUnitsNear(state: GameState, empireId: EmpireId, x: number, y: number, radius: number): Unit[] {
+  return state.units.filter(
+    unit => unit.empire !== empireId && hostileUnits(state, empireId, unit.empire) && Math.hypot(unit.x - x, unit.y - y) <= radius,
+  );
+}
+
+export function intruders(state: GameState, empireId: EmpireId): Unit[] {
+  const watched = new Set<number>();
+  for (const cell of buildingCellsOf(state, empireId)) {
+    for (const hex of area(cell, BOT_TUNING.threatRadiusHexes)) {
+      if (gridAt(state.grid, hex)) watched.add(gridIndex(state.grid, hex.q, hex.r));
+    }
+  }
+  return state.units.filter(unit => {
+    if (unit.empire === empireId) return false;
+    const cell = cellAtPixel(state, unit.x, unit.y);
+    if (!cell || (cell.owner !== empireId && !watched.has(gridIndex(state.grid, cell.q, cell.r)))) return false;
+    return hostileUnits(state, empireId, unit.empire);
+  });
+}
+
+export function rivalVehicleShare(state: GameState, empireId: EmpireId): number {
+  let vehicles = 0;
+  let total = 0;
+  for (const unit of state.units) {
+    if (unit.empire === empireId || !hostileUnits(state, empireId, unit.empire)) continue;
+    const stats = UNIT_STATS[unit.kind];
+    total += stats.population;
+    if (stats.vehicle) vehicles += stats.population;
+  }
+  return total === 0 ? 0 : vehicles / total;
+}
+
+export function producersBusy(state: GameState, empireId: EmpireId): boolean {
+  let producers = 0;
+  for (const cell of buildingCellsOf(state, empireId)) {
+    const building = cell.building;
+    if (!building || building.buildRemaining > 0) continue;
+    if (building.kind !== 'barracks' && building.kind !== 'factory') continue;
+    producers += 1;
+    const at = gridIndex(state.grid, cell.q, cell.r);
+    const line = state.production.find(item => item.at === at && item.building === building.id);
+    if ((line?.queue.length ?? 0) < BOT_TUNING.queueDepth) return false;
+  }
+  return producers > 0;
 }
