@@ -1,25 +1,27 @@
 import { spawnUnits, testEmpire } from '../support/fixture';
 import { labelWorld } from '@the-big-war/client/game/map/world-labels.service';
-import { createWorldIndex, setBuilding, setOwner } from '@the-big-war/client/game/map/world-index.service';
+import { buildingCellsOf, createWorldIndex, setBuilding, setOwner } from '@the-big-war/client/game/map/world-index.service';
 
 
 import { describe, expect, test } from 'bun:test';
 import { createRng } from '@the-big-war/game-engine/rng/rng.service';
+import { unitsOf } from '@the-big-war/client/game/unit/unit.service';
 import type { Empire } from '@the-big-war/client/game/empire/empire.types';
 import type { GameState } from '@the-big-war/client/game/state/state.types';
-import { botTick, createBot } from '@the-big-war/client/game/bot/bot.service';
 import { dispatch } from '@the-big-war/client/game/commands/commands.service';
 import { step } from '@the-big-war/client/game/simulation/simulation.service';
 import type { GameConfig } from '@the-big-war/client/game/config/config.types';
 import type { HexCell, HexGrid } from '@the-big-war/client/game/map/map.types';
 import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants';
 import type { Building } from '@the-big-war/client/game/building/building.types';
+import { createInitialState } from '@the-big-war/client/game/state/setup.service';
 import { FIXED_DT } from '@the-big-war/game-engine/simulation/simulation.constants';
 import { RESEARCH_NODES } from '@the-big-war/client/game/research/research.constants';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
+import { botTick, createBot, skillFor } from '@the-big-war/client/game/bot/bot.service';
 import { gridAt, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import { BOT_PERSONALITIES, BOT_TUNING } from '@the-big-war/client/game/bot/bot.constants';
 import { recomputeEmpireBonuses } from '@the-big-war/client/game/research/research.service';
+import { BOT_PERSONALITIES, BOT_SKILLS, BOT_TUNING } from '@the-big-war/client/game/bot/bot.constants';
 import { declareWar, getRelation, pendingOffer } from '@the-big-war/client/game/diplomacy/diplomacy.service';
 
 const FACTION_IDS = ['ironclad', 'league', 'verdant', 'academy'];
@@ -157,7 +159,8 @@ describe('botTick discipline', () => {
       for (const command of commands) {
         if (command.type === 'PlaceBuilding' || command.type === 'FireCannon' ||
             command.type === 'StartResearch' || command.type === 'OfferPeace' ||
-            command.type === 'DeclareWar') {
+            command.type === 'DeclareWar' || command.type === 'TrainUnit' ||
+            command.type === 'OrderUnits') {
           expect(command.empire).toBe(1);
         } else {
           throw new Error(`bot emitted an unexpected command: ${command.type}`);
@@ -356,9 +359,18 @@ describe('bot diplomacy & naval actions', () => {
     }
   });
 
+  test('a bot without an army does not start a war', () => {
+    const state = makeState(tinyConfig({ bot: { ...DEFAULT_GAME_CONFIG.bot, aggression: 0.8 } }));
+    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.6, economy: 0.2 }, difficulty: 0.8 });
+    for (let tick = 0; tick < 2000; tick++) {
+      expect(botTick(bot, state, 0.5).some(c => c.type === 'DeclareWar')).toBe(false);
+    }
+  });
+
   test('a bot on hard difficulty declares war on a weaker neighbour', () => {
     const state = makeState(tinyConfig({ bot: { ...DEFAULT_GAME_CONFIG.bot, aggression: 0.8 } }));
-    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.6, economy: 0.2 } });
+    spawnUnits(state, 1, state.grid.cells.find(cell => cell.owner === 1)!, 10);
+    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.6, economy: 0.2 }, difficulty: 0.8 });
     let war = null;
     for (let tick = 0; tick < 2000 && !war; tick++) {
       war = botTick(bot, state, 0.5).find(c => c.type === 'DeclareWar') ?? null;
@@ -371,3 +383,85 @@ describe('bot diplomacy & naval actions', () => {
   });
 });
 
+
+function playMatch(state: GameState, bots: readonly ReturnType<typeof createBot>[], seconds: number): void {
+  const tickSeconds = state.config.bot.tickSeconds;
+  let accumulator = 0;
+  for (let i = 0; i < Math.round(seconds / FIXED_DT) && state.status === 'playing'; i++) {
+    step(state, FIXED_DT);
+    accumulator += FIXED_DT;
+    while (accumulator >= tickSeconds) {
+      accumulator -= tickSeconds;
+      for (const bot of bots) for (const command of botTick(bot, state, tickSeconds)) dispatch(state, command);
+    }
+  }
+}
+
+function buildingKinds(state: GameState, empireId: number): string[] {
+  return buildingCellsOf(state, empireId).map(cell => cell.building!.kind);
+}
+
+function matchState(empireCount: number, seed = 1337): GameState {
+  const config = {
+    ...DEFAULT_GAME_CONFIG,
+    map: { ...DEFAULT_GAME_CONFIG.map, seed },
+    start: { ...DEFAULT_GAME_CONFIG.start, empireCount },
+  };
+  const state = createInitialState(config);
+  for (const empire of state.empires) empire.isHuman = false;
+  return state;
+}
+
+describe('bot skill', () => {
+  test('menu difficulties map to easy, normal and hard skill profiles', () => {
+    expect(skillFor(0.2)).toBe(BOT_SKILLS.easy);
+    expect(skillFor(0.5)).toBe(BOT_SKILLS.normal);
+    expect(skillFor(0.8)).toBe(BOT_SKILLS.hard);
+  });
+
+  test('harder bots react faster and need less of an edge to attack', () => {
+    expect(BOT_SKILLS.hard.reactionSeconds).toBeLessThan(BOT_SKILLS.normal.reactionSeconds);
+    expect(BOT_SKILLS.normal.reactionSeconds).toBeLessThan(BOT_SKILLS.easy.reactionSeconds);
+    expect(BOT_SKILLS.hard.attackRatio).toBeLessThan(BOT_SKILLS.easy.attackRatio);
+  });
+});
+
+describe('bot economy from the real start', () => {
+  test('opens with an economy building, not a barracks', () => {
+    const state = matchState(4);
+    for (const empire of state.empires) {
+      const bot = createBot({ empire: empire.id, seed: 1337, difficulty: 0.8 });
+      const place = botTick(bot, state, 0.5).find(command => command.type === 'PlaceBuilding');
+      expect(place).toBeDefined();
+      if (place?.type === 'PlaceBuilding') expect(place.kind).not.toBe('barracks');
+    }
+  });
+
+  test('bots build an economy, raise armies and expand within five minutes', () => {
+    const state = matchState(4);
+    const start = state.empires.map(empire => empire.hexCount);
+    const bots = state.empires.map(empire => createBot({ empire: empire.id, seed: 1337, difficulty: 0.5 }));
+    playMatch(state, bots, 300);
+    const developed = state.empires.filter(empire => {
+      const kinds = buildingKinds(state, empire.id);
+      return kinds.some(kind => kind === 'market' || kind === 'fishery') && kinds.includes('barracks');
+    });
+    expect(developed.length).toBeGreaterThanOrEqual(3);
+    const armed = state.empires.filter(empire => unitsOf(state, empire.id).length > 0);
+    expect(armed.length).toBeGreaterThanOrEqual(3);
+    const claimed = state.empires.reduce((sum, empire) => sum + empire.hexCount, 0);
+    const started = start.reduce((sum, count) => sum + count, 0);
+    expect(claimed).toBeGreaterThan(started * 4);
+  }, 120_000);
+
+  test('a hard bot outgrows an easy bot head to head', () => {
+    const state = matchState(2);
+    const bots = [
+      createBot({ empire: 0, seed: 1337, difficulty: 0.8 }),
+      createBot({ empire: 1, seed: 1337, difficulty: 0.2 }),
+    ];
+    playMatch(state, bots, 600);
+    expect(state.empires[0]!.hexCount).toBeGreaterThan(state.empires[1]!.hexCount);
+    expect(unitsOf(state, 0).length).toBeGreaterThan(unitsOf(state, 1).length);
+  }, 120_000);
+});
