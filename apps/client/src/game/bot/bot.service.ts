@@ -1,12 +1,12 @@
 import { unitCommands } from './bot-units.service';
-import type { Bot, BotOptions } from './bot.types';
-import { BOT_PERSONALITIES } from './bot.constants';
 import type { GameState } from '../state/state.types';
 import { fleetCommands } from './bot-military.service';
 import type { Command } from '../commands/commands.types';
 import { evaluateDiplomacy } from './bot-diplomacy.service';
+import type { Bot, BotOptions, BotSkill } from './bot.types';
 import { createRng } from '@the-big-war/game-engine/rng/rng.service';
 import type { Agent } from '@the-big-war/game-engine/agent/agent.types';
+import { BOT_PERSONALITIES, BOT_SKILLS, BOT_TUNING } from './bot.constants';
 import { cannonCommand, constructionCommands, researchCommand } from './bot-economy.service';
 
 export function createBot(options: BotOptions): Bot {
@@ -15,10 +15,22 @@ export function createBot(options: BotOptions): Bot {
   return {
     empire: options.empire,
     personality,
+    skill: skillFor(options.difficulty ?? 0.5),
     rng: createRng((options.seed + options.empire * 0x9e3779b9) >>> 0),
     clock: 0,
-    cooldowns: new Map(),
+    cooldowns: new Map([['units', -(options.empire % BOT_TUNING.staggerSlots) * 0.5]]),
+    reserve: 0,
+    armyBudget: 0,
+    scouts: new Set(),
+    tracks: new Map(),
+    boardingSince: new Map(),
   };
+}
+
+export function skillFor(difficulty: number): BotSkill {
+  if (difficulty >= BOT_TUNING.hardDifficulty) return BOT_SKILLS.hard;
+  if (difficulty <= BOT_TUNING.easyDifficulty) return BOT_SKILLS.easy;
+  return BOT_SKILLS.normal;
 }
 
 export function botTick(bot: Bot, state: GameState, dt: number): Command[] {
@@ -36,7 +48,7 @@ export function botTick(bot: Bot, state: GameState, dt: number): Command[] {
 
   commands.push(...constructionCommands(bot, state, empire));
   commands.push(...fleetCommands(bot, state, empire));
-  commands.push(...unitCommands(bot, state, empire));
+  commands.push(...unitCommands(bot, state, empire, dt));
 
   const cannon = cannonCommand(bot, state, empire);
   if (cannon) commands.push(cannon);
@@ -48,7 +60,7 @@ export function createBotAgents(state: GameState): Agent<GameState, Command>[] {
   return state.empires
     .filter(empire => !empire.isHuman)
     .map(empire => {
-      const bot = createBot({ empire: empire.id, seed: state.config.map.seed });
+      const bot = createBot({ empire: empire.id, seed: state.config.map.seed, difficulty: state.config.bot.aggression });
       return (current: GameState, dt: number) => botTick(bot, current, dt);
     });
 }

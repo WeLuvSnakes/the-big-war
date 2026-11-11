@@ -1,4 +1,5 @@
-import type { BotPersonality } from './bot.types';
+import type { BotPersonality, BotSkill } from './bot.types';
+import type { BuildingKind } from '../building/building.types';
 
 export const BOT_PERSONALITIES: readonly BotPersonality[] = [
   { aggression: 0.3, economy: 0.7, expansion: 0.5 },
@@ -9,7 +10,6 @@ export const BOT_PERSONALITIES: readonly BotPersonality[] = [
 
 export const BOT_TUNING = {
   researchScienceFloor: 50,
-  militaryBuildChance: 0.5,
   cannonFireChance: 0.7,
   warAggressionFloor: 0.4,
   warChancePerSecond: 0.06,
@@ -24,5 +24,101 @@ export const BOT_TUNING = {
   totalWarChancePerSecond: 0.25,
   navyGoldMultiple: 3,
   baseBuildingLimit: 12,
-  tilesPerBuildingLimit: 60,
+  tilesPerBuildingLimit: 25,
+  hardDifficulty: 0.65,
+  easyDifficulty: 0.35,
+  threatRadiusHexes: 3,
+  retreatHealth: 0.3,
+  civilianGuard: 0.75,
+  threatArmyShare: 0.75,
+  attackGroupMin: 4,
+  defenceRadius: 640,
+  strikeMargin: 1.5,
+  squadOrdersPerCycle: 6,
+  targetCandidates: 24,
+  stuckDistance: 12,
+  stuckSeconds: 6,
+  boardingTimeout: 45,
+  beachCooldown: 90,
+  invasionSize: 8,
+  invasionMax: 10,
+  singlesPerCycle: 12,
+  localSearchRadius: 8,
+  ringSearchRadius: 14,
+  fullScansPerCycle: 3,
+  staggerSlots: 4,
+  civilianReserveBase: 10,
+  civiliansPerProducer: 15,
+  growthScore: 40,
+  gathererGoldPerSecond: 0.35,
+  minerGoldPerSecond: 1,
+  labIncome: 2.5,
+  factoryIncome: 4,
+  barracksGoldPerSecond: 2.5,
+  armyBudgetBase: 150,
+  armyBudgetPerProducer: 100,
+  surplusGold: 300,
+  labScore: 0.035,
+  boomIncome: 6,
+  boomFloor: 0.3,
+  popFullScore: 0.02,
+  saturatedScore: 0.06,
+  queueDepth: 2,
+  scoutRefillSeconds: 20,
+  warArmyGroups: 2,
 };
+
+export const BOT_SKILLS: Readonly<Record<'easy' | 'normal' | 'hard', BotSkill>> = {
+  easy: {
+    reactionSeconds: 3,
+    slop: 0.35,
+    armyShare: 0.25,
+    attackRatio: 2.5,
+    barracksIncome: 4,
+    barracksDeadline: 200,
+    scoutSquads: 1,
+    retreat: false,
+    counters: false,
+    maxProducers: 3,
+  },
+  normal: {
+    reactionSeconds: 1.5,
+    slop: 0.12,
+    armyShare: 0.45,
+    attackRatio: 1.7,
+    barracksIncome: 3.5,
+    barracksDeadline: 150,
+    scoutSquads: 2,
+    retreat: true,
+    counters: false,
+    maxProducers: 8,
+  },
+  hard: {
+    reactionSeconds: 0.5,
+    slop: 0,
+    armyShare: 0.6,
+    attackRatio: 1.4,
+    barracksIncome: 3,
+    barracksDeadline: 120,
+    scoutSquads: 3,
+    retreat: true,
+    counters: true,
+    maxProducers: 16,
+  },
+};
+
+export const OPENING_ORDER: readonly BuildingKind[] = [
+  'market',
+  'miner',
+  'lumberjack',
+  'farm',
+];
+
+export const EARLY_RESEARCH: readonly string[] = [
+  'market_guilds',
+  'agriculture',
+  'logging',
+  'conscription',
+  'surveying',
+  'scientific_method',
+];
