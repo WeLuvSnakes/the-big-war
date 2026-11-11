@@ -1,8 +1,8 @@
 import type { Bot } from './bot.types';
 import { BOT_TUNING } from './bot.constants';
-import { populationOf } from '../unit/unit.service';
 import type { GameState } from '../state/state.types';
 import type { Command } from '../commands/commands.types';
+import { populationOf, unitsOf } from '../unit/unit.service';
 import type { Empire, EmpireId } from '../empire/empire.types';
 import { chance } from '@the-big-war/game-engine/rng/rng.service';
 import { effectiveAggression, hostileEdges, reachableEmpires } from './bot-queries.service';
@@ -69,6 +69,7 @@ export function evaluateDiplomacy(bot: Bot, state: GameState, empire: Empire): C
   }
 
   if (empire.neutralState) return null;
+  if (!isTotalWar(state) && unitsOf(state, bot.empire).length < BOT_TUNING.attackGroupMin * BOT_TUNING.warArmyGroups) return null;
 
   const target = warTarget(bot, state, empire, effectiveAggression(bot, state), atWar);
   return target === null ? null : { type: 'DeclareWar', empire: bot.empire, target };
