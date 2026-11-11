@@ -161,7 +161,6 @@ export const UNIT_TUNING = {
   deathBlastRadius: 40,
   captureSeconds: 3,
   captureClearRadius: 120,
-  garrisonDrainPerSecond: 1,
   spawnRadius: 22,
   maxQueue: 5,
   basePopulation: 10,

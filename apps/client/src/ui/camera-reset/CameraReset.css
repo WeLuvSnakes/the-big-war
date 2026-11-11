@@ -1,0 +1,24 @@
+.camera-reset {
+  bottom: var(--ui-hotbar-bottom);
+  padding: 2px;
+  position: fixed;
+  right: var(--ui-safe-inset);
+  user-select: none;
+  z-index: 25;
+}
+
+.street-tray .camera-reset-button {
+  color: var(--street-text);
+  height: 22px;
+  padding: 0 8px;
+  width: auto;
+}
+
+.street-tray .camera-reset-button:hover:not(:disabled) {
+  color: var(--street-accent);
+}
+
+.street-tray .camera-reset-button svg {
+  height: 11px;
+  width: 11px;
+}

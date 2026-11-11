@@ -1,5 +1,6 @@
 import type { EmpireId } from '../empire/empire.types';
 import type { BuildingId } from '../building/building.types';
+import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 
 export type UnitId = number;
 
@@ -76,6 +77,14 @@ export interface Unit {
 
   captureAt: number;
   capture: number;
+
+  boarding: Boarding | null;
+}
+
+export interface Boarding {
+  readonly group: UnitId;
+  readonly port: Axial;
+  readonly focus: Axial;
 }
 
 export interface ProductionQueue {

@@ -34,7 +34,6 @@ export interface BuildingConfig {
 export interface StartConfig {
   readonly gold: number;
   readonly civilians: number;
-  readonly soldiers: number;
   readonly science: number;
 
   readonly empireCount: number;
@@ -47,20 +46,6 @@ export interface StartConfig {
 export interface UpgradeConfig {
   readonly maxLevel: number;
   readonly costMultiplier: number;
-}
-
-export interface BarracksTierConfig {
-  readonly troop: string;
-
-  readonly upgradeCost: number;
-
-  readonly requiresResearch: string | null;
-
-  readonly speed: number;
-
-  readonly goldPerSoldier: number;
-
-  readonly attackPower: number;
 }
 
 export interface DemolishConfig {
@@ -94,28 +79,6 @@ export interface BatteryConfig {
   readonly range: number;
 
   readonly damage: number;
-}
-
-export interface WaveConfig {
-  readonly retreatPenalty: number;
-
-  readonly marchSecondsPerHex: number;
-
-  readonly maxMarchSeconds: number;
-
-  readonly baseTilesPerSecond: number;
-  readonly tilesPerRootTroop: number;
-
-  readonly minTroopsPerTile: number;
-  readonly densityWeight: number;
-  readonly defenderLossShare: number;
-  readonly sprawlCost: number;
-
-  readonly tileHealth: number;
-  readonly tileDamagePerTroop: number;
-  readonly tileHealSeconds: number;
-  readonly fightLossPerTroop: number;
-  readonly fightMinLossPerSecond: number;
 }
 
 export interface CombatConfig {
@@ -159,45 +122,6 @@ export interface GatherConfig {
 
   readonly oreLoadsPerTile: number;
   readonly oreGoldPerLoad: number;
-}
-
-export interface SupportConfig {
-
-  readonly cityTerritoryRadius: readonly number[];
-
-  readonly cityDefenceRadius: number;
-
-  readonly cityAttackLevel: number;
-  readonly cityAttackRadius: number;
-
-  readonly barracksAttackRadius: number;
-
-  readonly fortDefenceRadius: number;
-
-  readonly machineGunRadius: number;
-  readonly bunkerRadius: number;
-  readonly tankRadius: number;
-
-}
-
-export interface RecruitConfig {
-  readonly civiliansPerSoldier: number;
-
-  readonly secondsPerSoldier: number;
-  readonly cityReserveCap: number;
-  readonly bunkerReserveCap: number;
-
-  readonly barracksReserveCap: number;
-
-  readonly fortReserveCap: number;
-
-  readonly troopsPerTile: number;
-
-  readonly targetReserveRatio: number;
-
-  readonly draftSecondsPerSoldier: number;
-
-  readonly draftUntilRatio: number;
 }
 
 export interface BotConfig {
@@ -252,19 +176,15 @@ export interface GameConfig {
   readonly start: StartConfig;
   readonly upgrades: UpgradeConfig;
   readonly demolish: DemolishConfig;
-  readonly barracksTiers: readonly BarracksTierConfig[];
   readonly cannon: CannonConfig;
   readonly battery: BatteryConfig;
   readonly trench: TrenchConfig;
   readonly ship: ShipConfig;
-  readonly wave: WaveConfig;
   readonly combat: CombatConfig;
   readonly biomes: Readonly<Record<Biome, BiomeConfig>>;
   readonly victory: VictoryConfig;
   readonly economy: EconomyConfig;
-  readonly support: SupportConfig;
   readonly gather: GatherConfig;
-  readonly recruit: RecruitConfig;
   readonly bot: BotConfig;
   readonly diplomacy: DiplomacyConfig;
   readonly buildings: Readonly<Record<BuildingKind, BuildingConfig>>;

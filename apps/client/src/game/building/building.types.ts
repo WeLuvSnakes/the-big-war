@@ -14,13 +14,9 @@ export type BuildingKind =
   | 'port'
   | 'fishery'
   | 'barracks'
-  | 'fort'
   | 'cannon'
   | 'trench'
-  | 'machine_gun'
   | 'battery'
-  | 'bunker'
-  | 'tank'
   | 'factory';
 
 export type GathererPhase = 'idle' | 'outbound' | 'working' | 'returning';
@@ -62,10 +58,6 @@ export interface Building {
   buildRemaining: number;
 
   gatherers: Gatherer[];
-
-  garrison: number;
-
-  machineGun: boolean;
 
   shipBuild: number;
 

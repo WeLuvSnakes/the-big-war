@@ -21,10 +21,6 @@ export function handlePlaceBuilding(state: GameState, command: PlaceBuildingComm
 
   empire.gold -= buildingCost(state, command.empire, command.kind);
   empire.civilians -= ENGINE_TUNING.civiliansPerBuild;
-  if (command.kind === 'machine_gun' && cell.building) {
-    cell.building.machineGun = true;
-    return ok(command.type);
-  }
   cell.terrain = 'plain';
   setBuilding(state, cell, createBuilding(state, command.kind, 1, spec.buildSeconds));
   return ok(command.type);

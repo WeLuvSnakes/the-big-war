@@ -7,6 +7,7 @@ import type { GameSpeed } from '../../game/config/config.types';
 import { gameStore, live } from '../../game/store/store.service';
 import { perSecond } from '@the-big-war/frontend/ui/format/format';
 import { hasUnlimitedResources } from '../../game/empire/empire.service';
+import { populationCap, populationOf } from '../../game/unit/unit.service';
 import { useHoverMenu } from '@the-big-war/frontend/ui/hooks/hover-menu/HoverMenu.hook';
 import { FaAtom, FaUsers, GiCoin, GiCrossedSwords } from '@the-big-war/frontend/ui/icons/icons';
 
@@ -24,6 +25,9 @@ export const Hud = (props: HudProps) => {
 
   const currentSpeed = live(() => store.state.speed);
   const me = live(() => store.state.empires[store.state.playerEmpire] ?? store.state.empires[0]!);
+
+  const army = live(() => populationOf(store.state, store.state.playerEmpire));
+  const armyCap = live(() => populationCap(store.state, store.state.playerEmpire));
 
   const unlimited = () => hasUnlimitedResources(me());
 
@@ -52,9 +56,9 @@ export const Hud = (props: HudProps) => {
         </div>
         <div class="street-stat">
           <GiCrossedSwords class="hud-res-icon is-troops" />
-          <span class="street-label">Troops</span>
-          <strong>{Math.floor(me().soldiers)}</strong>
-          <span>/ {Math.floor(me().reserveCap)}<sup class={rateClass(me().troopBalance)}>{perSecond(me().troopBalance)}</sup></span>
+          <span class="street-label">Army</span>
+          <strong>{army()}</strong>
+          <span>/ {armyCap()}</span>
         </div>
       </div>
 

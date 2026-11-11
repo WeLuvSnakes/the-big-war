@@ -1,8 +1,8 @@
 import { withLiveEmpire } from '../command-guards';
 import { shellShips } from '../../ship/ship.service';
+import { shellUnits } from '../../unit/unit.service';
 import { markTile } from '../../map/world-index.service';
 import type { FireCannonCommand } from '../commands.types';
-import { shellOffensives } from '../../offensive/offensive.service';
 import { ok, fail } from '@the-big-war/game-engine/commands/command.service';
 import { distance, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
@@ -20,7 +20,7 @@ export const handleFireCannon = withLiveEmpire<FireCannonCommand>((state, comman
   empire.gold -= cannon.cost;
   from.building.cooldown = cannon.cooldown;
 
-  shellOffensives(state, command.empire, command.target, cannon.blastRadius, cannon.damage);
+  shellUnits(state, command.empire, command.target, cannon.blastRadius, cannon.damage);
   shellShips(state, command.empire, command.target, cannon.blastRadius, cannon.damage);
 
   if (cannon.destroysTerrain.includes(target.terrain)) {

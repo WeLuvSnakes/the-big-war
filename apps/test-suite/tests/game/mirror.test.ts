@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { foreignTarget } from '../support/mirror-fixture';
 import type { GameState } from '@the-big-war/client/game/state/state.types';
+import { gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { createInProcessSim } from '@the-big-war/client/game/sim/sim-host.service';
+import { getRelation } from '@the-big-war/client/game/diplomacy/diplomacy.service';
 import { FIXED_DT } from '@the-big-war/game-engine/simulation/simulation.constants';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
 
@@ -16,7 +18,7 @@ function view(state: GameState): unknown {
     landHexCount: state.landHexCount,
     cells: state.grid.cells,
     empires: state.empires,
-    offensives: state.offensives.map(({ frontier: _f, queued: _q, ...rest }) => rest),
+    units: state.units,
     ships: state.ships,
     relations: state.relations,
     offerCooldowns: state.offerCooldowns,
@@ -48,7 +50,10 @@ describe('sim mirror', () => {
       expect(view(store.state)).toEqual(view(host.state));
       if (round % 8 === 0) {
         const target = foreignTarget(store.state);
-        if (target) await store.dispatch({ type: 'SendTroops', empire: store.state.playerEmpire, target, percent: 60 });
+        if (target) {
+          const owner = gridAt(store.state.grid, target)!.owner;
+          await store.dispatch({ type: 'DeclareWar', empire: store.state.playerEmpire, target: owner });
+        }
       }
     }
     expect(store.state.index.buildings.length).toBeGreaterThan(0);
@@ -61,7 +66,7 @@ describe('sim mirror', () => {
     expect(store.state.tick).toBe(frozen);
     store.setPaused(false);
 
-    const bad = await store.dispatch({ type: 'SendTroops', empire: 99, target: { q: 0, r: 0 }, percent: 50 });
+    const bad = await store.dispatch({ type: 'DeclareWar', empire: 99, target: 0 });
     expect(bad.ok).toBe(false);
 
     const previous = store.state;
@@ -75,10 +80,8 @@ describe('match identity', () => {
   test('a command posted for the last match cannot land on the new one', async () => {
     const { host, store } = createInProcessSim();
     await store.startMatch();
-    const stale = { type: 'command' as const, seq: 9000, match: 0, command: { type: 'SendTroops' as const, empire: 0, target: { q: 0, r: 0 }, percent: 100 } };
-    const soldiers = host.state.empires[0]!.soldiers;
+    const stale = { type: 'command' as const, seq: 9000, match: 0, command: { type: 'DeclareWar' as const, empire: 0, target: 1 } };
     host.handle(stale);
-    expect(host.state.empires[0]!.soldiers).toBe(soldiers);
-    expect(host.state.offensives).toHaveLength(0);
+    expect(getRelation(host.state, 0, 1).status).toBe('peace');
   });
 });

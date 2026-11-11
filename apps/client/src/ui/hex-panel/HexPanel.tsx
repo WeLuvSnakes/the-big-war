@@ -4,21 +4,15 @@ import { ownerCss } from '../../render/theme';
 import { buildingLabel, terrainLabel } from '../text';
 import type { HexPanelProps } from './HexPanel.types';
 import { Bar } from '@the-big-war/frontend/ui/bar/Bar';
+import { populationOf } from '../../game/unit/unit.service';
 import { Panel } from '@the-big-war/frontend/ui/panel/Panel';
 import { gameStore, live } from '../../game/store/store.service';
 import { hasUnlock } from '../../game/research/research.service';
+import { trenchOccupants } from '../../game/trench/trench.service';
+import { buildingState, ownNeighbourCount } from './HexPanel.utility';
 import { boatsFrom, portBoatLimit } from '../../game/ship/ship.service';
-import { RESEARCH_BY_ID } from '../../game/research/research.constants';
-import { distance, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import { barracksTier, nextBarracksTier, portUpgradeCost, upgradeError } from '../../game/building/building.service';
-import {
-  attackFrom as findAttackFrom,
-  buildingState,
-  machineGunStatus as machineGunState,
-  ownNeighbourCount,
-  romanLevel,
-  trenchTargets as countTrenchTargets,
-} from './HexPanel.utility';
+import { gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { portUpgradeCost, upgradeError } from '../../game/building/building.service';
 
 export type { HexPanelProps };
 
@@ -42,11 +36,6 @@ export const HexPanel = (props: HexPanelProps) => {
     return current && current.owner >= 0 ? store.state.empires[current.owner] : null;
   };
 
-  const attackFrom = () => {
-    const selected = hex();
-    return selected ? findAttackFrom(store.state, selected, player()) : null;
-  };
-
   const building = () => cell()?.building ?? null;
   const canFire = () => {
     const current = building();
@@ -54,14 +43,6 @@ export const HexPanel = (props: HexPanelProps) => {
   };
 
   const liveBuilding = live(() => building());
-  const currentTier = () => {
-    const current = liveBuilding();
-    return current?.kind === 'barracks' ? barracksTier(store.state, current) : null;
-  };
-  const nextTier = live(() => {
-    const current = building();
-    return current && isOwn() && current.buildRemaining <= 0 ? nextBarracksTier(store.state, current) : null;
-  });
   const upgradeBlocker = live(() => {
     const selected = hex();
     return selected ? upgradeError(store.state, player(), selected) : null;
@@ -100,25 +81,14 @@ export const HexPanel = (props: HexPanelProps) => {
     const current = building();
     return current && current.kind === 'trench' && isOwn() && current.buildRemaining <= 0 ? current : null;
   };
-  const machineGunStatus = () => {
+  const stationed = live(() => {
     const current = cell();
-    return current ? machineGunState(current) : 'None';
-  };
-  const trenchTargets = () => {
-    const selected = hex();
-    return selected ? countTrenchTargets(store.state, selected, player()) : 0;
-  };
-  const orderTrench = (type: 'ManTrench' | 'LeaveTrench', percent: number) => {
-    const selected = hex();
-    if (!selected) return;
-    props.controllers.run({ type, empire: player(), hex: selected, percent });
-  };
-  const startTrenchAttack = () => {
-    const selected = hex();
-    if (!selected) return;
-    props.controllers.setTool({ kind: 'trench-attack', from: selected });
-    props.onClose();
-  };
+    return current && trench() ? trenchOccupants(store.state, current).length : 0;
+  });
+  const foreignArmy = live(() => {
+    const current = cell();
+    return current && current.owner >= 0 ? populationOf(store.state, current.owner) : 0;
+  });
 
   const ownNeighbours = () => {
     const selected = hex();
@@ -153,7 +123,7 @@ export const HexPanel = (props: HexPanelProps) => {
                 <div class="kit-col">
                   <div class="kit-row">
                     <strong class="hud-card-name">{buildingLabel(entry().kind)}</strong>
-                    <span class="street-drawer-panel-kind">{buildingState(store.state, liveBuilding() ?? entry())}</span>
+                    <span class="street-drawer-panel-kind">{buildingState(liveBuilding() ?? entry())}</span>
                   </div>
                   <Show when={isOwn()}>
                     <div class="kit-row">
@@ -174,27 +144,6 @@ export const HexPanel = (props: HexPanelProps) => {
                         </button>
                       </Show>
                     </div>
-                    <Show when={currentTier()}>
-                      {tier => (
-                        <span class="kit-note kit-num">
-                          Trains {tier().troop} · {tier().goldPerSoldier} gold each
-                        </span>
-                      )}
-                    </Show>
-                    <Show when={nextTier()}>
-                      {tier => (
-                        <div class="kit-col">
-                          <button type="button" class="kit-button" disabled={upgradeBlocker() !== null} onClick={upgrade}>
-                            Upgrade to {romanLevel((liveBuilding()?.level ?? 0) + 1)} ({tier().troop}) · {tier().upgradeCost} Gold
-                          </button>
-                          <Show when={upgradeBlocker() === 'not_researched' && tier().requiresResearch}>
-                            {nodeId => (
-                              <span class="kit-note">Requires {RESEARCH_BY_ID.get(nodeId())?.name ?? nodeId()}</span>
-                            )}
-                          </Show>
-                        </div>
-                      )}
-                    </Show>
                     <Show when={ownPort()}>
                       {port => (
                         <div class="kit-col">
@@ -240,54 +189,21 @@ export const HexPanel = (props: HexPanelProps) => {
             </Show>
 
             <Show when={trench()}>
-              {entry => (
-                <div class="kit-col">
-                  <span class="street-label">Trench</span>
-                  <Bar
-                    label="Garrison"
-                    ratio={entry().garrison / Math.max(1, store.state.config.trench.capacity)}
-                    value={`${Math.floor(entry().garrison)} / ${store.state.config.trench.capacity}`}
-                    variant="accent"
-                  />
-                  <span class="kit-note">Machine gun: {machineGunStatus()}</span>
-                  <div class="kit-row">
-                    <button
-                      type="button"
-                      class="kit-button"
-                      disabled={entry().garrison >= store.state.config.trench.capacity || (store.state.empires[player()]?.soldiers ?? 0) < 1}
-                      onClick={() => orderTrench('ManTrench', props.controllers.troopPercent())}
-                    >
-                      Man trench · {props.controllers.troopPercent()}%
-                    </button>
-                    <button
-                      type="button"
-                      class="kit-button is-ghost"
-                      disabled={entry().garrison < 1}
-                      onClick={() => orderTrench('LeaveTrench', 100)}
-                    >
-                      Withdraw
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    class="kit-button is-danger"
-                    disabled={entry().garrison < 1 || trenchTargets() === 0}
-                    onClick={startTrenchAttack}
-                  >
-                    Attack from trench
-                  </button>
-                </div>
-              )}
+              <div class="kit-col">
+                <span class="street-label">Trench</span>
+                <Bar
+                  label="Stationed"
+                  ratio={stationed() / Math.max(1, store.state.config.trench.capacity)}
+                  value={`${stationed()} / ${store.state.config.trench.capacity}`}
+                  variant="accent"
+                />
+                <span class="kit-note">Select infantry, then click this trench to station them inside.</span>
+              </div>
             </Show>
 
             <Show when={isForeign()}>
               <div class="kit-col">
-                <Bar
-                  label="Troops"
-                  ratio={Math.min(1, (owner()?.soldiers ?? 0) / Math.max(1, owner()?.reserveCap ?? 1))}
-                  value={Math.floor(owner()?.soldiers ?? 0)}
-                  variant="danger"
-                />
+                <span class="kit-note kit-num">Army size {foreignArmy()}</span>
               </div>
             </Show>
 
@@ -297,12 +213,6 @@ export const HexPanel = (props: HexPanelProps) => {
               </span>
             </Show>
 
-            <Show when={attackFrom() && isForeign()}>
-              <span class="kit-note">
-                Click foreign land to attack, right-drag or use the arrow keys to move the map.
-                <Show when={distance(attackFrom()!, hex()!) === 1}> ✓</Show>
-              </span>
-            </Show>
           </>
         )}
       </Show>

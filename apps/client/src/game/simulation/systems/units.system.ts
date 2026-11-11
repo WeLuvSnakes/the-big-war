@@ -1,3 +1,4 @@
+import { stepBoarding } from './boarding.system';
 import type { HexCell } from '../../map/map.types';
 import { isClaimable } from '../../map/terrain.service';
 import { UNIT_TUNING } from '../../unit/unit.constants';
@@ -6,6 +7,7 @@ import type { GameState } from '../../state/state.types';
 import { NEUTRAL_OWNER } from '../../empire/empire.constants';
 import { nextFloat } from '@the-big-war/game-engine/rng/rng.service';
 import { gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
 import type { ProductionQueue, Unit, UnitStats, WeaponStats } from '../../unit/unit.types';
 import {
   cellAtPixel,
@@ -75,6 +77,7 @@ export function stepUnits(state: GameState, dt: number): void {
   removeDead(state);
   const after = indexUnits(state);
   for (const unit of state.units) stepCapture(after, unit, dt);
+  stepBoarding(state);
 }
 
 function stepProduction(state: GameState, dt: number): void {
@@ -85,7 +88,8 @@ function stepProduction(state: GameState, dt: number): void {
       line.progress = 0;
       continue;
     }
-    line.progress += dt;
+    const trainSpeed = state.empires[line.empire]?.bonuses.trainSpeed;
+    line.progress += dt * (trainSpeed ? resolveModifier(1, trainSpeed) : 1);
     if (line.progress < unitStats(kind).trainSeconds) continue;
     line.progress = 0;
     line.queue.shift();
@@ -179,14 +183,21 @@ function fire(world: UnitWorld, shooter: Unit, weapon: WeaponStats, target: Unit
       if (other.empire === shooter.empire || !hostile(world, shooter.empire, other.empire)) return;
       const gap = Math.hypot(other.x - ex, other.y - ey);
       if (gap < weapon.splash) {
-        other.hp -= weaponDamage(unitStats(other.kind), weapon.penetration, weapon.damage * (1 - (gap / weapon.splash) * UNIT_TUNING.splashFalloff));
+        const falloff = 1 - (gap / weapon.splash) * UNIT_TUNING.splashFalloff;
+        other.hp -= weaponDamage(unitStats(other.kind), weapon.penetration, weapon.damage * falloff * combatScale(world.state, shooter, other));
       }
       if (gap < weapon.splash * UNIT_TUNING.splashSuppressionRange) other.suppression = 100;
     });
     return;
   }
-  if (hit) target.hp -= weaponDamage(unitStats(target.kind), weapon.penetration, weapon.damage);
+  if (hit) target.hp -= weaponDamage(unitStats(target.kind), weapon.penetration, weapon.damage * combatScale(world.state, shooter, target));
   target.suppression = Math.min(100, target.suppression + weapon.suppression);
+}
+
+function combatScale(state: GameState, shooter: Unit, target: Unit): number {
+  const attack = state.empires[shooter.empire]?.bonuses.attack;
+  const defence = state.empires[target.empire]?.bonuses.defence;
+  return (attack ? resolveModifier(1, attack) : 1) / (defence ? resolveModifier(1, defence) : 1);
 }
 
 function jitter(state: GameState): number {
@@ -357,12 +368,6 @@ function stepCapture(world: UnitWorld, unit: Unit, dt: number): void {
   }
   if (contested(world, unit)) return;
   const building = cell.building;
-  if (building && building.garrison > 0) {
-    building.garrison = Math.max(0, building.garrison - UNIT_TUNING.garrisonDrainPerSecond * dt);
-    const owner = state.empires[cell.owner];
-    if (owner) owner.soldiers = Math.max(0, owner.soldiers - UNIT_TUNING.garrisonDrainPerSecond * dt);
-    return;
-  }
   unit.capture += dt;
   if (unit.capture < UNIT_TUNING.captureSeconds) return;
   unit.capture = 0;
@@ -370,7 +375,6 @@ function stepCapture(world: UnitWorld, unit: Unit, dt: number): void {
   if (building) {
     if (building.kind === 'cannon' || building.kind === 'battery') building.cooldown = 0;
     building.demolishAt = null;
-    building.garrison = 0;
     building.shipBuild = 0;
   }
 }

@@ -1,8 +1,7 @@
 import { tileScale } from '../map/terrain.service';
-import { troopsAtSea } from '../ship/ship.service';
+import { populationOf } from '../unit/unit.service';
 import type { GameState } from '../state/state.types';
 import type { EmpireId } from '../empire/empire.types';
-import { endOffensivesBetween } from '../offensive/offensive.service';
 import type { AttackCheck, DiplomaticRelation, DiplomaticStatus, OfferCooldown, PendingOffer } from './diplomacy.types';
 
 const AT_PEACE: DiplomaticRelation = { status: 'peace', treatyUntil: null };
@@ -75,7 +74,6 @@ export function declareWar(state: GameState, attacker: EmpireId, defender: Empir
 export function agreePeace(state: GameState, a: EmpireId, b: EmpireId): void {
   if (a === b) return;
   setRelation(state, a, b, 'peace', state.elapsed + state.config.diplomacy.treatySeconds);
-  endOffensivesBetween(state, a, b);
 }
 
 export function dissolveDiplomacy(state: GameState, empireId: EmpireId): void {
@@ -147,8 +145,8 @@ export function acceptsOffer(state: GameState, from: EmpireId, target: EmpireId)
   const receiver = state.empires[target];
   if (!offerer || !receiver) return false;
   if (receiver.neutralState) return true;
-  const offererStrength = offerer.soldiers + offerer.hexCount + troopsAtSea(state, from);
-  const receiverStrength = receiver.soldiers + receiver.hexCount + troopsAtSea(state, target);
+  const offererStrength = populationOf(state, from) + offerer.hexCount;
+  const receiverStrength = populationOf(state, target) + receiver.hexCount;
   if (isTotalWar(state)) return receiverStrength <= offererStrength * state.config.diplomacy.totalWarPeaceRatio;
   const leniency = 1.5 - state.config.bot.aggression;
   return receiverStrength <= offererStrength * 1.5 * leniency;

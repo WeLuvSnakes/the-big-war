@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { testEmpire, setTroops } from '../support/fixture';
+import { spawnUnits, testEmpire } from '../support/fixture';
 import { createRng } from '@the-big-war/game-engine/rng/rng.service';
 import type { Empire } from '@the-big-war/client/game/empire/empire.types';
 import type { GameState } from '@the-big-war/client/game/state/state.types';
@@ -31,7 +31,7 @@ function createTestState(configOverrides: Partial<GameConfig> = {}): GameState {
 
   const empires: Empire[] = [];
   for (let id = 0; id < config.start.empireCount; id++) {
-    empires.push(testEmpire({ id, factionId: 'ironclad', gold: 500, science: 500, civilians: 50, soldiers: 100, reserveCap: 200 }));
+    empires.push(testEmpire({ id, factionId: 'ironclad', gold: 500, science: 500, civilians: 50 }));
   }
 
   for (const cell of grid.cells) {
@@ -46,7 +46,7 @@ function createTestState(configOverrides: Partial<GameConfig> = {}): GameState {
     grid,
     index: createWorldIndex(grid),
     empires,
-    offensives: [], walkers: [],
+    walkers: [],
     ships: [],
     nextShipId: 1,
     shipHash: new Map(),
@@ -56,7 +56,6 @@ function createTestState(configOverrides: Partial<GameConfig> = {}): GameState {
     production: [],
     unitEvents: [],
     nextUnitEventId: 1,
-    nextOffensiveId: 1,
     spawnSites: [],
     landHexCount: grid.cells.length,
     map: labelWorld(grid),
@@ -74,6 +73,20 @@ function createTestState(configOverrides: Partial<GameConfig> = {}): GameState {
   };
 }
 
+function home(state: GameState, empire: number) {
+  return state.grid.cells.find(cell => cell.owner === empire)!;
+}
+
+function invade(state: GameState, units: readonly number[]) {
+  const size = state.config.map.hexSize;
+  return dispatch(state, {
+    type: 'OrderUnits',
+    empire: 0,
+    units,
+    order: { kind: 'move', mode: 'amove', x: 4.5 * size, y: 0.5 * size, formation: 'wedge' },
+  });
+}
+
 describe('diplomacy contracts', () => {
   test('relationKey is canonical and symmetric', () => {
     expect(relationKey(0, 1)).toBe('0:1');
@@ -89,15 +102,9 @@ describe('diplomacy contracts', () => {
     expect(isProtected(state, 0, 1)).toBe(false);
   });
 
-  test('attacking another nation declares war', () => {
+  test('ordering units into another nation declares war', () => {
     const state = createTestState();
-    setTroops(state, 0, 100);
-    const result = dispatch(state, {
-      type: 'SendTroops',
-      empire: 0,
-      target: { q: 4, r: 0 },
-      percent: 50,
-    });
+    const result = invade(state, spawnUnits(state, 0, home(state, 0), 3).map(unit => unit.id));
     expect(result.ok).toBe(true);
     expect(getRelation(state, 0, 1).status).toBe('war');
     expect(getRelation(state, 1, 0).status).toBe('war');
@@ -114,19 +121,10 @@ describe('diplomacy contracts', () => {
     if (!result.ok) expect(result.reason).toBe('invalid_diplomacy');
   });
 
-  test('offer peace during war dissolves fronts and starts a treaty', () => {
+  test('offer peace during war starts a treaty that blocks new invasions', () => {
     const state = createTestState();
-    setTroops(state, 0, 100);
-    
-    dispatch(state, {
-      type: 'SendTroops',
-      empire: 0,
-      target: { q: 4, r: 0 },
-      percent: 50,
-    });
-    expect(state.offensives.length).toBe(1);
-    expect(state.empires[0]!.soldiers).toBe(50);
-    setTroops(state, 1, 40);
+    const army = spawnUnits(state, 0, home(state, 0), 6).map(unit => unit.id);
+    invade(state, army);
 
     const peaceResult = dispatch(state, {
       type: 'OfferPeace',
@@ -139,15 +137,7 @@ describe('diplomacy contracts', () => {
     expect(rel.status).toBe('peace');
     expect(rel.treatyUntil).toBe(state.elapsed + state.config.diplomacy.treatySeconds);
 
-    expect(state.offensives.length).toBe(0);
-    expect(state.empires[0]!.soldiers).toBe(100);
-
-    const attackBlocked = dispatch(state, {
-      type: 'SendTroops',
-      empire: 0,
-      target: { q: 4, r: 0 },
-      percent: 50,
-    });
+    const attackBlocked = invade(state, army);
     expect(attackBlocked.ok).toBe(false);
     if (!attackBlocked.ok) expect(attackBlocked.reason).toBe('in_peace');
   });
@@ -165,7 +155,8 @@ describe('diplomacy contracts', () => {
   test('a much stronger bot rejects peace and the offer goes on cooldown', () => {
     const state = createTestState();
     declareWar(state, 0, 1);
-    setTroops(state, 0, 10);
+    spawnUnits(state, 0, home(state, 0), 10);
+    spawnUnits(state, 1, home(state, 1), 100);
 
     const first = dispatch(state, { type: 'OfferPeace', empire: 0, target: 1 });
     expect(first.ok).toBe(false);
@@ -247,8 +238,8 @@ describe('diplomacy contracts', () => {
     const calm = createTestState({ bot: { ...DEFAULT_GAME_CONFIG.bot, aggression: 0.2 } });
     const angry = createTestState({ bot: { ...DEFAULT_GAME_CONFIG.bot, aggression: 0.8 } });
     for (const state of [calm, angry]) {
-      setTroops(state, 0, 80);
-      setTroops(state, 1, 100);
+      spawnUnits(state, 0, home(state, 0), 80);
+      spawnUnits(state, 1, home(state, 1), 100);
     }
     expect(acceptsOffer(calm, 0, 1)).toBe(true);
     expect(acceptsOffer(angry, 0, 1)).toBe(false);

@@ -1,6 +1,5 @@
 import { createSignal } from 'solid-js';
 import { ownerColor } from '../render/theme';
-import { audio } from '../audio/audio.service';
 import { createControllers } from './controllers';
 import type { Camera } from '../render/world.types';
 import { createUnitAudio } from '../audio/unit-audio';
@@ -95,11 +94,6 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
       scale: world.camera.scale,
     }),
     ping: (point, color) => world.pingUnits(point.x, point.y, color),
-    onTroopsSent: target => {
-      world.spawnFx('captureFlash', target, undefined);
-      audio.play('march');
-      audio.play('warCry');
-    },
   });
 
   const centreOnWorld = (point: Pixel) => {
@@ -291,7 +285,6 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
     world.setOverlay({
       selected: controllers.selectedHex(),
       selectedShip: controllers.selectedShip(),
-      focusedOffensive: controllers.focusedOffensive(),
       hovered: placing ? hover : null,
       ghost:
         placing && hover
@@ -302,9 +295,9 @@ export function createMatchRuntime(options: MatchRuntimeOptions): MatchRuntime {
             }
           : null,
       spawnPlots: choosingSpawn() ? spawnPlots() : [],
-      cannonFrom: tool.kind === 'cannon' || tool.kind === 'trench-attack' ? tool.from : null,
-      cannonRange: tool.kind === 'trench-attack' ? 1 : store.state.config.cannon.range,
-      cannonTarget: tool.kind === 'cannon' || tool.kind === 'trench-attack' ? controllers.hoverHex() : null,
+      cannonFrom: tool.kind === 'cannon' ? tool.from : null,
+      cannonRange: store.state.config.cannon.range,
+      cannonTarget: tool.kind === 'cannon' ? controllers.hoverHex() : null,
     });
     world.render(store.state);
 

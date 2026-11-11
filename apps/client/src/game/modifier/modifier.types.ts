@@ -7,10 +7,7 @@ export type ModifierKey =
   | 'buildCost'
   | 'attack'
   | 'defence'
-  | 'reserveCap'
-  | 'recruitSpeed'
-  | 'frontAttack'
-  | 'frontDefence';
+  | 'trainSpeed';
 
 export type Modifier = EngineModifier<ModifierKey>;
 

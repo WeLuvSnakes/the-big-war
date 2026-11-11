@@ -4,13 +4,11 @@ import type { GameState } from '../../state/state.types';
 import { findSeaRoute } from '../../ship/sea-route.service';
 import { portWaterBody } from '../../map/port-site.service';
 import { NEUTRAL_OWNER } from '../../empire/empire.constants';
-import { shellingFactor } from '../../building/building.service';
+import { orderGroup, shellUnits } from '../../unit/unit.service';
 import { nextInt } from '@the-big-war/game-engine/rng/rng.service';
 import { canAttack, declareWar } from '../../diplomacy/diplomacy.service';
 import { allBuildingCells, setBuilding } from '../../map/world-index.service';
 import { area, gridAt, gridCoord } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import { drawFromEncampments, returnToReserve, takeGarrison } from '../../troops/troops.service';
-import { launchBeachhead, launchOffensive, shellOffensives } from '../../offensive/offensive.service';
 import {
   atWar,
   boatsFrom,
@@ -80,26 +78,35 @@ function arrive(state: GameState, ship: Ship): void {
 }
 
 function land(state: GameState, ship: Ship): void {
-  const troops = ship.troops;
-  const beach = gridAt(state.grid, ship.beach!)!;
-  const focus = ship.focus!;
-  ship.troops = 0;
-  ship.hp = 0;
-  if (beach.owner === ship.empire) {
-    const owner = gridAt(state.grid, focus)?.owner ?? NEUTRAL_OWNER;
-    if (owner === ship.empire || !launchOffensive(state, ship.empire, owner, focus, troops, beach)) {
-      returnToReserve(state, ship.empire, troops);
-    }
+  if (ship.cargo.length > 0) {
+    disembark(state, ship);
     return;
   }
-  if (beach.owner !== NEUTRAL_OWNER) {
-    if (!canAttack(state, ship.empire, beach.owner).allowed) {
-      returnToReserve(state, ship.empire, troops);
-      return;
-    }
-    declareWar(state, ship.empire, beach.owner);
+  ship.hp = 0;
+}
+
+function disembark(state: GameState, ship: Ship): void {
+  const beach = gridAt(state.grid, ship.beach!)!;
+  const focus = ship.focus!;
+  const units = ship.cargo;
+  ship.cargo = [];
+  ship.hp = 0;
+  const hostileBeach = beach.owner !== NEUTRAL_OWNER && beach.owner !== ship.empire;
+  const blocked = hostileBeach && !canAttack(state, ship.empire, beach.owner).allowed;
+  if (hostileBeach && !blocked) declareWar(state, ship.empire, beach.owner);
+  const size = state.config.map.hexSize;
+  const x = (beach.q + 0.5) * size;
+  const y = (beach.r + 0.5) * size;
+  for (const unit of units) {
+    unit.x = x;
+    unit.y = y;
+    unit.tx = x;
+    unit.ty = y;
+    unit.gx = x;
+    unit.gy = y;
+    state.units.push(unit);
   }
-  launchBeachhead(state, ship.empire, beach, focus, troops);
+  if (!blocked) orderGroup(units, (focus.q + 0.5) * size, (focus.r + 0.5) * size, 'amove', 'wedge');
 }
 
 function settleTrade(state: GameState, ship: Ship): void {
@@ -154,16 +161,12 @@ function shellCoast(state: GameState, ship: Ship, range: number): boolean {
   }
   if (!best) return false;
   const { coastTroopDamage, coastBuildingHits } = state.config.ship;
-  const hit = coastTroopDamage * shellingFactor(state, best.owner, best);
-  drawFromEncampments(state, best.owner, best, hit);
-  shellOffensives(state, ship.empire, best, 1, hit);
+  shellUnits(state, ship.empire, best, 1, coastTroopDamage);
   const building = best.building;
   if (building) {
     building.shellDamage += 1;
     if (building.shellDamage >= coastBuildingHits * building.level) {
-      const troops = takeGarrison(state, best);
       setBuilding(state, best, null);
-      returnToReserve(state, best.owner, troops);
     }
   }
   return true;

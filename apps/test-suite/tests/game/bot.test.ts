@@ -1,4 +1,4 @@
-import { testEmpire } from '../support/fixture';
+import { spawnUnits, testEmpire } from '../support/fixture';
 import { labelWorld } from '@the-big-war/client/game/map/world-labels.service';
 import { createWorldIndex, setBuilding, setOwner } from '@the-big-war/client/game/map/world-index.service';
 
@@ -6,19 +6,15 @@ import { createWorldIndex, setBuilding, setOwner } from '@the-big-war/client/gam
 import { describe, expect, test } from 'bun:test';
 import { createRng } from '@the-big-war/game-engine/rng/rng.service';
 import type { Empire } from '@the-big-war/client/game/empire/empire.types';
-import { findSite } from '@the-big-war/client/game/bot/bot-queries.service';
 import type { GameState } from '@the-big-war/client/game/state/state.types';
 import { botTick, createBot } from '@the-big-war/client/game/bot/bot.service';
 import { dispatch } from '@the-big-war/client/game/commands/commands.service';
 import { step } from '@the-big-war/client/game/simulation/simulation.service';
 import type { GameConfig } from '@the-big-war/client/game/config/config.types';
 import type { HexCell, HexGrid } from '@the-big-war/client/game/map/map.types';
-import type { Command } from '@the-big-war/client/game/commands/commands.types';
 import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants';
 import type { Building } from '@the-big-war/client/game/building/building.types';
 import { FIXED_DT } from '@the-big-war/game-engine/simulation/simulation.constants';
-import type { Offensive } from '@the-big-war/client/game/offensive/offensive.types';
-import { createMinHeap } from '@the-big-war/game-engine/collections/min-heap.service';
 import { RESEARCH_NODES } from '@the-big-war/client/game/research/research.constants';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
 import { gridAt, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
@@ -48,7 +44,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
   }));
   const empires: Empire[] = [];
   for (let id = 0; id < config.start.empireCount; id++) {
-    empires.push(testEmpire({ id, factionId: FACTION_IDS[id % FACTION_IDS.length]!, gold: config.start.gold, science: config.start.science, civilians: config.start.civilians, soldiers: config.start.soldiers, reserveCap: config.recruit.cityReserveCap }));
+    empires.push(testEmpire({ id, factionId: FACTION_IDS[id % FACTION_IDS.length]!, gold: config.start.gold, science: config.start.science, civilians: config.start.civilians }));
   }
   const state: GameState = {
     config,
@@ -57,7 +53,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
     grid,
     index: createWorldIndex(grid),
     empires,
-    offensives: [], walkers: [],
+    walkers: [],
     ships: [],
     nextShipId: 1,
     shipHash: new Map(),
@@ -67,7 +63,6 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
     production: [],
     unitEvents: [],
     nextUnitEventId: 1,
-    nextOffensiveId: 1,
     spawnSites: [],
     landHexCount: grid.cells.length,
     map: labelWorld(grid),
@@ -98,7 +93,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
 }
 
 function city(state: GameState, level = 1): Building {
-  return { id: state.nextBuildingId++, kind: 'city', level, cooldown: 0, growth: 0, demolishAt: null, buildRemaining: 0, gatherers: [], garrison: 0, machineGun: false, shipBuild: 0, shellDamage: 0 };
+  return { id: state.nextBuildingId++, kind: 'city', level, cooldown: 0, growth: 0, demolishAt: null, buildRemaining: 0, gatherers: [], shipBuild: 0, shellDamage: 0 };
 }
 
 function countHexes(state: GameState, empireId: number): void {
@@ -160,8 +155,7 @@ describe('botTick discipline', () => {
     for (let i = 0; i < 40; i++) {
       const commands = botTick(bot, state, 0.5);
       for (const command of commands) {
-        if (command.type === 'SendTroops' ||
-            command.type === 'PlaceBuilding' || command.type === 'FireCannon' ||
+        if (command.type === 'PlaceBuilding' || command.type === 'FireCannon' ||
             command.type === 'StartResearch' || command.type === 'OfferPeace' ||
             command.type === 'DeclareWar') {
           expect(command.empire).toBe(1);
@@ -217,24 +211,6 @@ describe('botTick discipline', () => {
 });
 
 describe('botTick behaviour', () => {
-  test('a bot only mounts machine guns in its own trenches, and mans border trenches', () => {
-    const state = makeState();
-    state.empires[1]!.unlocks.push('building:machine_gun');
-    expect(findSite(state, 1, 'machine_gun')).toBeNull();
-
-    const site = findSite(state, 1, 'trench');
-    expect(site).not.toBeNull();
-    const cell = gridAt(state.grid, site!)!;
-    setBuilding(state, cell, { ...city(state), kind: 'trench' });
-    expect(findSite(state, 1, 'machine_gun')).toEqual(site);
-
-    state.empires[1]!.soldiers = state.empires[1]!.reserveCap;
-    const bot = createBot({ empire: 1, seed: 7 });
-    const man = botTick(bot, state, 0.5).find(command => command.type === 'ManTrench');
-    expect(man).toBeDefined();
-    if (man && man.type === 'ManTrench') expect(man.hex).toEqual(site);
-  });
-
   test('an economy bot places a building when gold and a site allow', () => {
     const state = makeState();
     const empire = state.empires[1]!;
@@ -278,45 +254,11 @@ describe('botTick behaviour', () => {
     }
   });
 
-  test('an aggressive bot with plenty of reserve sends troops at a hostile edge', () => {
-    const state = makeState();
-    const empire = state.empires[1]!;
-    empire.soldiers = 400; 
-    empire.reserveCap = 500;
-    declareWar(state, 1, 2);
-    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 1, economy: 0 } });
-    const commands = botTick(bot, state, 0.5);
-    const send = commands.find(command => command.type === 'SendTroops');
-    expect(send).toBeDefined();
-    if (send && send.type === 'SendTroops') {
-      expect(gridAt(state.grid, send.target)!.owner).not.toBe(1);
-    }
-  });
-
-  test('a bot never marches into an empire it is not at war with', () => {
-    const state = makeState();
-    const empire = state.empires[1]!;
-    empire.soldiers = 400;
-    empire.reserveCap = 500;
-    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.3, economy: 0.7 } });
-    const commands = botTick(bot, state, 0.5);
-    expect(commands.some(command => command.type === 'SendTroops')).toBe(false);
-  });
-
-  test('a turtle bot with a reserve at the floor sends nothing', () => {
-    const state = makeState();
-    const empire = state.empires[1]!;
-    empire.soldiers = Math.floor(empire.reserveCap * BOT_TUNING.reserveFloorRatio);
-    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.1, economy: 0.9 } });
-    const commands = botTick(bot, state, 0.5);
-    expect(commands.some(command => command.type === 'SendTroops')).toBe(false);
-  });
   test('verified commands all dispatch successfully on a live, peaceful tick', () => {
     const state = makeState();
     const empire = state.empires[1]!;
     empire.gold = 500;
     empire.science = 500;
-    empire.soldiers = 300;
     const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.6, economy: 0.6 } });
     const commands = botTick(bot, state, 0.5);
     for (const command of commands) {
@@ -334,7 +276,6 @@ describe('botTick in a running match', () => {
     for (const empire of state.empires) {
       empire.gold = 300;
       empire.science = 120;
-      empire.soldiers = 120;
     }
     const bots = state.empires.map(empire => createBot({ empire: empire.id, seed: state.config.map.seed }));
 
@@ -356,7 +297,6 @@ describe('botTick in a running match', () => {
       expect(Number.isFinite(empire.gold)).toBe(true);
       expect(Number.isFinite(empire.science)).toBe(true);
       expect(Number.isFinite(empire.civilians)).toBe(true);
-      expect(Number.isFinite(empire.soldiers)).toBe(true);
     }
   });
 
@@ -366,7 +306,6 @@ describe('botTick in a running match', () => {
       for (const empire of state.empires) {
         empire.gold = 300;
         empire.science = 120;
-        empire.soldiers = 120;
       }
       const bots = state.empires.map(empire => createBot({ empire: empire.id, seed: state.config.map.seed }));
       const tickSeconds = state.config.bot.tickSeconds;
@@ -388,11 +327,9 @@ describe('botTick in a running match', () => {
 describe('bot diplomacy & naval actions', () => {
   test('bot evaluates diplomacy and offers peace when outnumbered at war', () => {
     const state = makeState();
-    
     declareWar(state, 1, 0);
-    
-    state.empires[0]!.soldiers = 200;
-    state.empires[1]!.soldiers = 10;
+    spawnUnits(state, 0, state.grid.cells.find(cell => cell.owner === 0)!, 20);
+    spawnUnits(state, 1, state.grid.cells.find(cell => cell.owner === 1)!, 2);
     const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.3, economy: 0.7 } });
     const commands = botTick(bot, state, 0.5);
     const peaceCmd = commands.find(c => c.type === 'OfferPeace');
@@ -413,7 +350,6 @@ describe('bot diplomacy & naval actions', () => {
 
   test('a bot on easy difficulty never declares war on its own', () => {
     const state = makeState(tinyConfig({ bot: { ...DEFAULT_GAME_CONFIG.bot, aggression: 0.2 } }));
-    state.empires[1]!.soldiers = 400;
     const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.6, economy: 0.2 } });
     for (let tick = 0; tick < 500; tick++) {
       expect(botTick(bot, state, 0.5).some(c => c.type === 'DeclareWar')).toBe(false);
@@ -422,7 +358,6 @@ describe('bot diplomacy & naval actions', () => {
 
   test('a bot on hard difficulty declares war on a weaker neighbour', () => {
     const state = makeState(tinyConfig({ bot: { ...DEFAULT_GAME_CONFIG.bot, aggression: 0.8 } }));
-    state.empires[1]!.soldiers = 400;
     const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.6, economy: 0.2 } });
     let war = null;
     for (let tick = 0; tick < 2000 && !war; tick++) {
@@ -436,86 +371,3 @@ describe('bot diplomacy & naval actions', () => {
   });
 });
 
-
-function fort(state: GameState, garrison: number): Building {
-  return { ...city(state), kind: 'fort', garrison };
-}
-
-function enemyOffensive(id: number, head: { q: number; r: number }, mission: Offensive['mission'] = 'attack'): Offensive {
-  return {
-    id, empire: 2, target: 1, troops: 8, focus: head, head, march: null, mission,
-    budget: 0, order: 0, taken: 0, frontier: createMinHeap(), queued: new Set(), recent: [],
-  } as Offensive;
-}
-
-function ownGroup(id: number, focus: { q: number; r: number }, mission: Offensive['mission'] = 'attack'): Offensive {
-  return {
-    id, empire: 1, target: 2, troops: 5, focus, head: focus, march: null, mission,
-    budget: 0, order: 0, taken: 0, frontier: createMinHeap(), queued: new Set(), recent: [],
-  } as Offensive;
-}
-
-function defenceState(): GameState {
-  const state = makeState();
-  const empire = state.empires[1]!;
-  empire.soldiers = 100;
-  empire.reserveCap = 500;
-  empire.gold = 0;
-  setBuilding(state, gridAt(state.grid, { q: 3, r: 2 })!, fort(state, 10));
-  setBuilding(state, gridAt(state.grid, { q: 5, r: 4 })!, fort(state, 3));
-  declareWar(state, 1, 2);
-  state.offensives.push(enemyOffensive(90, { q: 6, r: 3 }));
-  return state;
-}
-
-describe('bot defence', () => {
-  test('does not react instantly, then sends a group and orders it to hold', () => {
-    const state = defenceState();
-    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.9, economy: 0.1 } });
-    expect(botTick(bot, state, 0.5).some(command => command.type === 'SendTroops')).toBe(false);
-    let send: Command | undefined;
-    for (let i = 0; i < 20 && !send; i++) send = botTick(bot, state, 0.5).find(command => command.type === 'SendTroops');
-    expect(send).toBeDefined();
-    expect(bot.clock).toBeLessThanOrEqual(BOT_TUNING.defenceReactionDelay + BOT_TUNING.defenceReactionJitter + 1.5);
-    state.offensives.push(ownGroup(91, { q: 6, r: 4 }));
-    const order = botTick(bot, state, 0.5).find(command => command.type === 'OrderOffensive');
-    expect(order).toEqual({ type: 'OrderOffensive', empire: 1, offensive: 91, target: { q: 5, r: 4 } });
-  });
-
-  test('defence takes priority over a new attack', () => {
-    const state = defenceState();
-    state.empires[1]!.soldiers = 400;
-    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 1, economy: 0 } });
-    const sends = botTick(bot, state, 0.5).filter(command => command.type === 'SendTroops');
-    expect(sends).toHaveLength(0);
-  });
-
-  test('is deterministic for a fixed seed', () => {
-    const run = (): string[] => {
-      const state = defenceState();
-      const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 0.9, economy: 0.1 } });
-      const out: string[] = [];
-      for (let i = 0; i < 12; i++) out.push(JSON.stringify(botTick(bot, state, 0.5)));
-      return out;
-    };
-    expect(run()).toEqual(run());
-  });
-});
-
-describe('bot attack groups', () => {
-  test('never starts more than the tuned number of attack groups', () => {
-    const state = makeState();
-    state.empires[1]!.soldiers = 400;
-    state.empires[1]!.reserveCap = 500;
-    declareWar(state, 1, 2);
-    for (let i = 0; i < BOT_TUNING.maxAttackGroups; i++) state.offensives.push(ownGroup(10 + i, { q: 6, r: i }));
-    const bot = createBot({ empire: 1, seed: 7, personality: { aggression: 1, economy: 0 } });
-    for (let i = 0; i < 40; i++) {
-      const commands = botTick(bot, state, 0.5);
-      expect(commands.some(command => command.type === 'SendTroops')).toBe(false);
-      for (const command of commands) {
-        if (command.type === 'OrderOffensive') expect(state.offensives.some(item => item.id === command.offensive)).toBe(true);
-      }
-    }
-  });
-});

@@ -1,18 +1,15 @@
 import { audio } from '../audio/audio.service';
 import { createUnitControls } from './unit-controls';
 import { UNIT_KINDS, UNIT_STATS } from '../game/unit/unit.constants';
-import { clampPercent } from '@the-big-war/game-engine/math/math.service';
 
 
 import { createSignal } from 'solid-js';
 import type { ShipId } from '../game/ship/ship.types';
-import { isClaimable } from '../game/map/terrain.service';
 import { whenSettled } from '../game/store/store.service';
 import type { EmpireId } from '../game/empire/empire.types';
 import { isNavigable } from '../game/ship/sea-route.service';
 import { shipById, shipsNear } from '../game/ship/ship.service';
 import type { BuildingKind } from '../game/building/building.types';
-import type { OffensiveId } from '../game/offensive/offensive.types';
 import type { Axial, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import type { Command, CommandError, CommandResult } from '../game/commands/commands.types';
 import type {
@@ -36,9 +33,7 @@ export function createControllers(deps: ControllerDeps): Controllers {
   const [selectedHex, setSelectedHex] = createSignal<Axial | null>(null);
   const [hoverHex, setHoverHex] = createSignal<Axial | null>(null);
   const [tool, setToolSignal] = createSignal<Tool>({ kind: 'idle' });
-  const [troopPercent, setTroopPercentSignal] = createSignal(50);
   const [selectedShip, setSelectedShip] = createSignal<ShipId | null>(null);
-  const [focusedOffensive, setFocusedOffensive] = createSignal<OffensiveId | null>(null);
   const [notices, setNotices] = createSignal<readonly CommandNotice[]>([]);
 
   const state = () => store.state;
@@ -83,37 +78,12 @@ export function createControllers(deps: ControllerDeps): Controllers {
 
   const units = createUnitControls({ store, run, view: deps.view, ping: deps.ping });
 
-  const own = (hex: Axial): boolean => gridAt(state().grid, hex)?.owner === player();
-  const foreign = (hex: Axial): boolean => {
-    const cell = gridAt(state().grid, hex);
-    return !!cell && cell.owner !== player() && isClaimable(cell.terrain);
-  };
-
-  const sendTroops = (target: Axial) => {
-    run({ type: 'SendTroops', empire: player(), target, percent: troopPercent() }, () => deps.onTroopsSent?.(target));
-  };
-
-  const orderOffensive = (offensive: OffensiveId, target: Axial) => {
-    run({ type: 'OrderOffensive', empire: player(), offensive, target });
-  };
-
   const placeBuilding = (hex: Axial, building: BuildingKind) => {
     run({ type: 'PlaceBuilding', empire: player(), hex, kind: building });
   };
 
   const fireCannon = (from: Axial, target: Axial) => {
     run({ type: 'FireCannon', empire: player(), from, target }, () => setToolSignal({ kind: 'idle' }));
-  };
-
-  const trenchAttack = (from: Axial, target: Axial) => {
-    if (distance(from, target) !== 1 || !foreign(target)) {
-      notice('invalid_target');
-      return;
-    }
-    run({ type: 'TrenchAttack', empire: player(), hex: from, target, percent: troopPercent() }, () => {
-      deps.onTroopsSent?.(target);
-      setTool({ kind: 'idle' });
-    });
   };
 
   const tapShip = (hex: Axial): boolean => {
@@ -146,7 +116,6 @@ export function createControllers(deps: ControllerDeps): Controllers {
   const cancelTool = () => {
     if (tool().kind !== 'idle') setTool({ kind: 'idle' });
     else if (units.clear()) return;
-    else if (focusedOffensive() !== null) setFocusedOffensive(null);
     else {
       setSelectedHex(null);
       setSelectedShip(null);
@@ -174,32 +143,10 @@ export function createControllers(deps: ControllerDeps): Controllers {
       fireCannon(active.from, hex);
       return;
     }
-    if (active.kind === 'trench-attack') {
-      trenchAttack(active.from, hex);
-      return;
-    }
-
-    const focused = focusedOffensive();
-    if (focused !== null) {
-      if (state().offensives.some(item => item.id === focused && item.empire === player())) {
-        orderOffensive(focused, hex);
-        return;
-      }
-      setFocusedOffensive(null);
-    }
-
     if (units.tap(deps.screenToWorld(at), shift)) return;
 
     if (tapShip(hex)) return;
 
-    if (own(hex)) {
-      selectHex(hex);
-      return;
-    }
-    if (foreign(hex)) {
-      sendTroops(hex);
-      return;
-    }
     selectHex(hex);
   };
 
@@ -227,16 +174,12 @@ export function createControllers(deps: ControllerDeps): Controllers {
     selectedHex,
     hoverHex,
     tool,
-    troopPercent,
     notices,
     selectedShip,
-    focusedOffensive,
-    focusOffensive: setFocusedOffensive,
     units,
     selectHex,
     selectShip: setSelectedShip,
     setHover: setHoverHex,
-    setTroopPercent: percent => setTroopPercentSignal(clampPercent(percent)),
     setTool,
     cancelTool,
     hexAtScreen,

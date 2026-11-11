@@ -1,6 +1,5 @@
 import { BOT_TUNING } from './bot.constants';
 import type { HexCell } from '../map/map.types';
-import { ownTrench } from '../trench/trench.service';
 import { seaIndex } from '../ship/sea-route.service';
 import type { GameState } from '../state/state.types';
 import type { EmpireId } from '../empire/empire.types';
@@ -32,7 +31,6 @@ export function findSite(state: GameState, empireId: EmpireId, kind: BuildingKin
     const empire = state.empires[empireId];
     if (!empire || !hasUnlock(empire, `building:${kind}`)) return null;
   }
-  if (kind === 'machine_gun') return unarmedTrench(state, empireId);
   if (kind === 'trench') return borderTrenchSite(state, empireId);
   const gathered = GATHERED_TERRAIN[kind];
   if (gathered) return gathererSite(state, empireId, gathered);
@@ -66,13 +64,6 @@ export function bordersForeignEmpire(state: GameState, empireId: EmpireId, hex: 
   return false;
 }
 
-function unarmedTrench(state: GameState, empireId: EmpireId): Axial | null {
-  for (const cell of ownedCells(state, empireId)) {
-    const hex = { q: cell.q, r: cell.r };
-    if (ownTrench(state, empireId, hex)?.machineGun === false) return hex;
-  }
-  return null;
-}
 
 function borderTrenchSite(state: GameState, empireId: EmpireId): Axial | null {
   for (const cell of ownedCells(state, empireId)) {
@@ -83,14 +74,6 @@ function borderTrenchSite(state: GameState, empireId: EmpireId): Axial | null {
   return null;
 }
 
-export function unmannedBorderTrench(state: GameState, empireId: EmpireId): Axial | null {
-  for (const cell of ownedCells(state, empireId)) {
-    const hex = { q: cell.q, r: cell.r };
-    const trench = ownTrench(state, empireId, hex);
-    if (trench && trench.garrison === 0 && bordersForeignEmpire(state, empireId, hex)) return hex;
-  }
-  return null;
-}
 
 export function findCannonShot(state: GameState, empireId: EmpireId): CannonShot | null {
   const range = state.config.cannon.range;

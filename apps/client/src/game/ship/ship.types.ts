@@ -1,3 +1,4 @@
+import type { Unit } from '../unit/unit.types';
 import type { EmpireId } from '../empire/empire.types';
 import type { BuildingId } from '../building/building.types';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
@@ -23,7 +24,7 @@ export interface Ship {
 
   cooldown: number;
 
-  troops: number;
+  cargo: Unit[];
   beach: Axial | null;
   focus: Axial | null;
 

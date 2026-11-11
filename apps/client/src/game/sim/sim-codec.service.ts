@@ -5,10 +5,8 @@ import { rebuildShipHash } from '../ship/ship.service';
 import { createBaseState } from '../state/state.service';
 import type { GameConfig } from '../config/config.types';
 import { NEUTRAL_OWNER } from '../empire/empire.constants';
-import type { Offensive } from '../offensive/offensive.types';
 import type { Biome, HexCell, HexGrid, Terrain } from '../map/map.types';
-import { createMinHeap } from '@the-big-war/game-engine/collections/min-heap.service';
-import type { FrameMessage, OffensiveView, ShipView, SnapshotMessage, WalkerView } from './sim.types';
+import type { FrameMessage, ShipView, SnapshotMessage, WalkerView } from './sim.types';
 import { addRoad, drainChangedTiles, markTile, setBuilding, setOwner } from '../map/world-index.service';
 import type { Building, BuildingKind, Gatherer, GathererPhase, Walker } from '../building/building.types';
 
@@ -25,18 +23,14 @@ const KINDS: readonly BuildingKind[] = [
   'port',
   'fishery',
   'barracks',
-  'fort',
   'cannon',
   'trench',
-  'machine_gun',
   'battery',
-  'bunker',
-  'tank',
   'factory',
 ];
 
 const TILE_STRIDE = 5;
-const BUILDING_STRIDE = 13;
+const BUILDING_STRIDE = 11;
 const GATHERER_STRIDE = 7;
 
 const orNaN = (value: number | null | undefined): number => value ?? Number.NaN;
@@ -76,8 +70,6 @@ function encodeBuildings(state: GameState): Pick<FrameMessage, 'buildings' | 'ga
     buildings[row++] = building.growth;
     buildings[row++] = orNaN(building.demolishAt);
     buildings[row++] = building.buildRemaining;
-    buildings[row++] = building.garrison;
-    buildings[row++] = building.machineGun ? 1 : 0;
     buildings[row++] = building.shipBuild;
     buildings[row++] = building.shellDamage;
     buildings[row++] = building.gatherers.length;
@@ -101,11 +93,6 @@ function shipView(ship: Ship, paths: ShipPaths): ShipView {
   return { ...view, path };
 }
 
-function offensiveView(offensive: Offensive): OffensiveView {
-  const { frontier: _frontier, queued: _queued, ...view } = offensive;
-  return view;
-}
-
 function walkerView({ path: _path, ...view }: Walker): WalkerView {
   return view;
 }
@@ -125,7 +112,6 @@ export function encodeFrame(state: GameState, paused: boolean, paths: ShipPaths)
     landHexCount: state.landHexCount,
     spawnSites: state.spawnSites,
     agentAccumulator: state.agentAccumulator,
-    nextOffensiveId: state.nextOffensiveId,
     nextShipId: state.nextShipId,
     nextBuildingId: state.nextBuildingId,
     nextUnitId: state.nextUnitId,
@@ -136,7 +122,6 @@ export function encodeFrame(state: GameState, paused: boolean, paths: ShipPaths)
     tiles: encodeTiles(state),
     ...encodeBuildings(state),
     empires: state.empires,
-    offensives: state.offensives.map(offensiveView),
     walkers: state.walkers.map(walkerView),
     ships: state.ships.map(ship => shipView(ship, paths)),
     relations: state.relations,
@@ -235,8 +220,6 @@ function emptyBuilding(id: number, kind: BuildingKind): Building {
     demolishAt: null,
     buildRemaining: 0,
     gatherers: [],
-    garrison: 0,
-    machineGun: false,
     shipBuild: 0,
     shellDamage: 0,
   };
@@ -260,11 +243,9 @@ function applyBuildings(state: GameState, buildings: Float64Array, gatherers: Fl
     building.growth = buildings[row + 5]!;
     building.demolishAt = orNull(buildings[row + 6]!);
     building.buildRemaining = buildings[row + 7]!;
-    building.garrison = buildings[row + 8]!;
-    building.machineGun = buildings[row + 9]! === 1;
-    building.shipBuild = buildings[row + 10]!;
-    building.shellDamage = buildings[row + 11]!;
-    const count = buildings[row + 12]!;
+    building.shipBuild = buildings[row + 8]!;
+    building.shellDamage = buildings[row + 9]!;
+    const count = buildings[row + 10]!;
     building.gatherers = readGatherers(gatherers, nextGatherer, count);
     nextGatherer += count * GATHERER_STRIDE;
   }
@@ -297,7 +278,6 @@ export function applyFrame(state: GameState, frame: FrameMessage): void {
   state.landHexCount = frame.landHexCount;
   state.spawnSites = frame.spawnSites;
   state.agentAccumulator = frame.agentAccumulator;
-  state.nextOffensiveId = frame.nextOffensiveId;
   state.nextShipId = frame.nextShipId;
   state.nextBuildingId = frame.nextBuildingId;
   state.nextUnitId = frame.nextUnitId;
@@ -312,11 +292,6 @@ export function applyFrame(state: GameState, frame: FrameMessage): void {
     if (state.empires[at] === undefined) state.empires[at] = empire;
     else Object.assign(state.empires[at], empire);
   });
-  state.offensives = reconcile(state.offensives, frame.offensives, view => ({
-    ...view,
-    frontier: createMinHeap(),
-    queued: new Set<number>(),
-  }));
   state.walkers = frame.walkers.map(view => ({ ...view, path: [] }));
   state.ships = reconcile(state.ships, frame.ships, view => ({ ...view, path: view.path ?? [] }));
   rebuildShipHash(state);

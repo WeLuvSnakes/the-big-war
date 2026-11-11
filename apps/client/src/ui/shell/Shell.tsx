@@ -8,21 +8,19 @@ import { VOID_COLOR } from '../../render/theme';
 import { HexPanel } from '../hex-panel/HexPanel';
 import { UnitMenu } from '../unit-menu/UnitMenu';
 import { audio } from '../../audio/audio.service';
-import { ArmyPanel } from '../army-panel/ArmyPanel';
 import { EndScreen } from '../end-screen/EndScreen';
 import { WikiPanel } from '../wiki-panel/WikiPanel';
 import { aboutCard, openAbout } from '../about/about';
 import { BuildPanel } from '../build-panel/BuildPanel';
 import { MenuScreen } from '../menu-screen/MenuScreen';
+import { CameraReset } from '../camera-reset/CameraReset';
 import { SmallScreen } from '../small-screen/SmallScreen';
 import type { NoticesProps, PanelId } from './Shell.types';
-import { DeploySlider } from '../deploy-slider/DeploySlider';
 import { assignNationColors } from '../../render/nation-colors';
 import { ResearchPanel } from '../research-panel/ResearchPanel';
 import { gameStore, live } from '../../game/store/store.service';
 import { DiplomacyPanel } from '../diplomacy-panel/DiplomacyPanel';
 import { createWorld, type WorldRenderer } from '../../render/world';
-import { offensivesOf } from '../../game/offensive/offensive.service';
 import { ProductionPanel } from '../production-panel/ProductionPanel';
 import { Rail, RailAction } from '@the-big-war/frontend/ui/rail/Rail';
 import type { BuildingKind } from '../../game/building/building.types';
@@ -33,7 +31,7 @@ import { createMatchRuntime, type MatchRuntime } from '../../session/runtime';
 import { gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { createEffect, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import { DEFAULT_PLAYER_NAME, configFromSettings, createMatchFlow } from '../../session/flow';
-import { FaBook, FaFlag, FaHammer, FaCrosshairs, FaAtom, FaSignOutAlt, FaMusic, FaVolumeUp } from '@the-big-war/frontend/ui/icons/icons';
+import { FaBook, FaFlag, FaHammer, FaAtom, FaSignOutAlt, FaMusic, FaVolumeUp } from '@the-big-war/frontend/ui/icons/icons';
 
 export type { NoticesProps, PanelId };
 
@@ -151,7 +149,6 @@ export const Shell = () => {
   };
   const closePanel = (id: Exclude<PanelId, null>) => () => setPanel(current => (current === id ? null : current));
 
-  const activeWaves = live(() => offensivesOf(store.state, store.state.playerEmpire).length);
   const pendingOfferCount = live(() => pendingOffersTo(store.state, store.state.playerEmpire).length);
 
   const ownPortSelected = live(() => {
@@ -223,14 +220,6 @@ export const Shell = () => {
             onClick={() => togglePanel('research')}
           />
           <RailAction
-            label="Combat"
-            icon={<FaCrosshairs />}
-            active={panel() === 'army'}
-            badge={activeWaves()}
-            badgeAccent
-            onClick={() => togglePanel('army')}
-          />
-          <RailAction
             label="Build"
             icon={<FaHammer />}
             active={panel() === 'build'}
@@ -249,9 +238,6 @@ export const Shell = () => {
 
         <Show when={panel() === 'build' && runtime()}>
           {active => <BuildPanel controllers={active().controllers} onClose={closePanel('build')} />}
-        </Show>
-        <Show when={panel() === 'army' && runtime()}>
-          {active => <ArmyPanel controllers={active().controllers} onClose={closePanel('army')} />}
         </Show>
         <Show when={panel() === 'research'}>
           <ResearchPanel onClose={closePanel('research')} />
@@ -286,8 +272,7 @@ export const Shell = () => {
                 />
                 <Notices controllers={active().controllers} />
               </div>
-              <DeploySlider
-                controllers={active().controllers}
+              <CameraReset
                 cameraMoved={active().cameraMoved()}
                 onReset={() => active().resetCamera()}
               />

@@ -45,4 +45,4 @@ for (const [name, ms] of rows) {
   console.log(`${name.padEnd(22)} ${(ms / SAMPLE_TICKS).toFixed(3).padStart(8)}ms/tick ${((ms / sum) * 100).toFixed(1).padStart(5)}%`);
 }
 console.log(`${'total'.padEnd(22)} ${(sum / SAMPLE_TICKS).toFixed(3).padStart(8)}ms/tick`);
-console.log(`offensives: ${state.offensives.length}`);
+console.log(`units: ${state.units.length}`);

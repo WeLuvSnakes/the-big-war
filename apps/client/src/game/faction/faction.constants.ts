@@ -37,12 +37,12 @@ export const FACTIONS: readonly FactionDef[] = [
   {
     id: 'academy',
     name: 'Researcher',
-    blurb: 'Science first: faster research, stouter defence.',
+    blurb: 'Science first: faster research, tougher units, slower training.',
     colorIndex: 3,
     bonuses: [
       { key: 'scienceRate', mul: 1.35, label: 'Researcher' },
-      { key: 'frontDefence', mul: 1.1, label: 'Researcher' },
-      { key: 'reserveCap', mul: 0.9, label: 'Researcher' },
+      { key: 'defence', mul: 1.1, label: 'Researcher' },
+      { key: 'trainSpeed', mul: 0.9, label: 'Researcher' },
     ],
   },
 ];

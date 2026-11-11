@@ -64,13 +64,8 @@ describe('match integration', () => {
     }
 
     if (target) {
-      store.state.empires[me]!.soldiers = 100;
-      const send = store.dispatch({
-        type: 'SendTroops',
-        empire: me,
-        target,
-        percent: 50,
-      });
+      const owner = gridAt(store.state.grid, target)!.owner;
+      const send = store.dispatch({ type: 'DeclareWar', empire: me, target: owner });
       
       expect(typeof send.ok).toBe('boolean');
     }
@@ -88,7 +83,6 @@ describe('match integration', () => {
     expect(store.state.elapsed).toBeGreaterThan(0);
     for (const empire of store.state.empires) {
       expect(Number.isFinite(empire.gold)).toBe(true);
-      expect(Number.isFinite(empire.soldiers)).toBe(true);
       expect(empire.gold).toBeGreaterThanOrEqual(0);
     }
   });
@@ -105,7 +99,6 @@ describe('match integration', () => {
       for (let i = 0; i < 600; i++) store.step(1 / 60);
       return store.state.empires.map(empire => ({
         gold: Math.round(empire.gold),
-        soldiers: Math.round(empire.soldiers),
         hexCount: empire.hexCount,
       }));
     };

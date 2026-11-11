@@ -5,14 +5,13 @@ import { flood } from '@the-big-war/client/game/map/world-labels.service';
 import { isPortSite } from '@the-big-war/client/game/map/port-site.service';
 import { setOwner } from '@the-big-war/client/game/map/world-index.service';
 import { MAP_MASKS } from '@the-big-war/client/game/map/map-masks.constants';
-import { dispatch } from '@the-big-war/client/game/commands/commands.service';
 import { MAP_PRESET_ORDER } from '@the-big-war/client/game/map/map.constants';
 import { createInitialState } from '@the-big-war/client/game/state/setup.service';
 import { reachableEmpires } from '@the-big-war/client/game/bot/bot-queries.service';
 import { createNoise, sampleFbm } from '@the-big-war/game-engine/noise/noise.service';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
+import { gridAt, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import { checkWinConditions } from '@the-big-war/client/game/simulation/systems/victory.system';
-import { gridAt, gridIndex, neighbors } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 const world = (preset: MapPreset, seed: number, width = 120, height = 72, empireCount = 6) =>
   createInitialState({
@@ -131,24 +130,6 @@ describe('map generation', () => {
 });
 
 describe('water rules', () => {
-  test('waves refuse water and unreachable islands', () => {
-    const state = world('archipelago', 8);
-    const water = state.grid.cells.find(cell => isWater(cell.terrain))!;
-    state.empires[0]!.soldiers = 50;
-    const result = dispatch(state, { type: 'SendTroops', empire: 0, target: { q: water.q, r: water.r }, percent: 50 });
-    expect(result.ok).toBe(false);
-    expect(state.offensives.length).toBe(0);
-
-    const home = state.grid.cells.find(cell => cell.owner === 0)!;
-    const mine = state.map.landmass[gridIndex(state.grid, home.q, home.r)];
-    const away = state.grid.cells.find(
-      cell => cell.owner === -1 && !isWater(cell.terrain) && state.map.landmass[gridIndex(state.grid, cell.q, cell.r)] !== mine,
-    );
-    if (away) {
-      expect(dispatch(state, { type: 'SendTroops', empire: 0, target: { q: away.q, r: away.r }, percent: 50 }).ok).toBe(false);
-    }
-  });
-
   test('holding 80% of land wins by domination', () => {
     const state = world('pangaea', 2, 72, 42, 2);
     const land = state.grid.cells.filter(cell => !isWater(cell.terrain));

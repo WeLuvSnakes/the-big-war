@@ -5,7 +5,6 @@ import { empireNames } from '../names/names.service';
 import type { Empire } from '../empire/empire.types';
 import type { GameConfig } from '../config/config.types';
 import { NEUTRAL_OWNER } from '../empire/empire.constants';
-import { addToEncampments } from '../troops/troops.service';
 import { scaleConfigToMap } from '../config/config.service';
 import { createBuilding } from '../building/building.service';
 import type { BuildingKind } from '../building/building.types';
@@ -192,14 +191,6 @@ function claimTerritory(state: GameState, empireId: number, capital: Axial, size
   }
   if (gridAt(state.grid, capital)?.owner === empireId) placeStartBuilding(state, capital, 'city', START_CITY_LEVEL);
   clearPortSite(state, empireId, capital, size);
-  garrisonStart(state, empireId);
-}
-
-function garrisonStart(state: GameState, empireId: number): void {
-  const empire = state.empires[empireId]!;
-  const troops = empire.soldiers;
-  empire.soldiers = 0;
-  addToEncampments(state, empireId, troops);
 }
 
 function clearPortSite(state: GameState, empireId: number, capital: Axial, size: number): void {

@@ -2,7 +2,6 @@ import type { ShipId } from '../ship/ship.types';
 import type { EmpireId } from '../empire/empire.types';
 import type { GameSpeed } from '../config/config.types';
 import type { BuildingKind } from '../building/building.types';
-import type { OffensiveId } from '../offensive/offensive.types';
 import type { UnitId, UnitKind, UnitOrder } from '../unit/unit.types';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import type { CommandOutcome, CommandLogEntry as EngineCommandLogEntry } from '@the-big-war/game-engine/commands/command.types';
@@ -13,8 +12,6 @@ export type CommandError =
   | 'insufficient_gold'
   | 'insufficient_civilians'
   | 'insufficient_science'
-  | 'insufficient_troops'
-  | 'reserve_full'
   | 'trench_full'
   | 'invalid_target'
   | 'not_researched'
@@ -35,28 +32,6 @@ export type CommandError =
   | 'queue_full'
   | 'stale_match';
 
-export interface SendTroopsCommand {
-  readonly type: 'SendTroops';
-  readonly empire: EmpireId;
-
-  readonly target: Axial;
-
-  readonly percent: number;
-}
-
-export interface RecallOffensiveCommand {
-  readonly type: 'RecallOffensive';
-  readonly empire: EmpireId;
-  readonly offensive: OffensiveId;
-}
-
-export interface OrderOffensiveCommand {
-  readonly type: 'OrderOffensive';
-  readonly empire: EmpireId;
-  readonly offensive: OffensiveId;
-  readonly target: Axial;
-}
-
 export interface PlaceBuildingCommand {
   readonly type: 'PlaceBuilding';
   readonly empire: EmpireId;
@@ -74,28 +49,6 @@ export interface UpgradeBuildingCommand {
   readonly type: 'UpgradeBuilding';
   readonly empire: EmpireId;
   readonly hex: Axial;
-}
-
-export interface ManTrenchCommand {
-  readonly type: 'ManTrench';
-  readonly empire: EmpireId;
-  readonly hex: Axial;
-  readonly percent: number;
-}
-
-export interface LeaveTrenchCommand {
-  readonly type: 'LeaveTrench';
-  readonly empire: EmpireId;
-  readonly hex: Axial;
-  readonly percent: number;
-}
-
-export interface TrenchAttackCommand {
-  readonly type: 'TrenchAttack';
-  readonly empire: EmpireId;
-  readonly hex: Axial;
-  readonly target: Axial;
-  readonly percent: number;
 }
 
 export interface TrainUnitCommand {
@@ -193,15 +146,9 @@ export interface RespondOfferCommand {
 }
 
 export type Command =
-  | SendTroopsCommand
-  | RecallOffensiveCommand
-  | OrderOffensiveCommand
   | PlaceBuildingCommand
   | DemolishBuildingCommand
   | UpgradeBuildingCommand
-  | ManTrenchCommand
-  | LeaveTrenchCommand
-  | TrenchAttackCommand
   | FireCannonCommand
   | TrainUnitCommand
   | CancelUnitCommand

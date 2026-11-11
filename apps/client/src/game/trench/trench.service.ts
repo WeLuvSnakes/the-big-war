@@ -1,8 +1,8 @@
+import type { Unit } from '../unit/unit.types';
 import type { HexCell } from '../map/map.types';
 import type { GameState } from '../state/state.types';
 import type { EmpireId } from '../empire/empire.types';
 import type { Building } from '../building/building.types';
-import { buildingCellsOf } from '../map/world-index.service';
 import { gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 
@@ -14,20 +14,17 @@ export function ownTrench(state: GameState, empire: EmpireId, hex: Axial): Build
   return building;
 }
 
-export function garrisonRoom(state: GameState, building: Building): number {
-  return Math.max(0, state.config.trench.capacity - building.garrison);
+export function trenchOccupants(state: GameState, cell: HexCell): Unit[] {
+  const size = state.config.map.hexSize;
+  return state.units.filter(
+    unit => unit.empire === cell.owner && Math.floor(unit.x / size) === cell.q && Math.floor(unit.y / size) === cell.r,
+  );
 }
 
-export function isMannedMachineGun(cell: HexCell): boolean {
-  const building = cell.building;
-  if (!building || building.kind !== 'trench' || !building.machineGun || building.buildRemaining > 0) return false;
-  return building.garrison > 0;
-}
-
-export function garrisonedTroops(state: GameState, empire: EmpireId): number {
-  let total = 0;
-  for (const cell of buildingCellsOf(state, empire)) {
-    total += cell.building?.garrison ?? 0;
-  }
-  return total;
+export function trenchSlot(state: GameState, hex: Axial, index: number): { x: number; y: number } {
+  const size = state.config.map.hexSize;
+  const capacity = state.config.trench.capacity;
+  const angle = (index / capacity) * Math.PI * 2;
+  const radius = size * 0.25;
+  return { x: (hex.q + 0.5) * size + Math.cos(angle) * radius, y: (hex.r + 0.5) * size + Math.sin(angle) * radius };
 }

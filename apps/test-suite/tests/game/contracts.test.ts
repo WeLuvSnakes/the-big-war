@@ -53,22 +53,6 @@ describe('command bus contract', () => {
     expect(state.empires[1]!.factionId).toBe(FACTIONS[2]!.id);
   });
 
-  test('SendTroops reports insufficient_troops for an empty reserve', () => {
-    const state = createDevState();
-    const empire = state.empires[0]!;
-    const foreign = state.grid.cells.find(c => c.owner !== empire.id && c.owner !== NEUTRAL_OWNER);
-    if (!foreign) return;
-    empire.soldiers = 0;
-    const result = dispatch(state, {
-      type: 'SendTroops',
-      empire: 0,
-      target: foreign,
-      percent: 50,
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('insufficient_troops');
-  });
-
   test('StartResearch rejects without science and accepts with enough', () => {
     const state = createDevState();
     const empire = state.empires[0]!;

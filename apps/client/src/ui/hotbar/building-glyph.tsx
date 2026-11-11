@@ -1,13 +1,10 @@
 import type { JSX } from 'solid-js';
 import type { BuildingKind } from '../../game/building/building.types';
 import {
-  FaBolt,
-  FaBox,
   FaBuilding,
   FaCrosshairs,
   FaHammer,
   FaLayerGroup,
-  FaShieldAlt,
   FaShoppingBag,
   FaStar,
   FaUsers,
@@ -17,7 +14,6 @@ import {
   GiGem,
   GiPineTree,
   GiSprout,
-  GiTank,
 } from '@the-big-war/frontend/ui/icons/icons';
 
 const GLYPHS: Record<BuildingKind, (props: { class?: string }) => JSX.Element> = {
@@ -30,13 +26,9 @@ const GLYPHS: Record<BuildingKind, (props: { class?: string }) => JSX.Element> =
   port: GiAnchor,
   fishery: GiCoin,
   barracks: FaUsers,
-  fort: FaShieldAlt,
   cannon: FaCrosshairs,
   trench: FaLayerGroup,
-  machine_gun: FaBolt,
   battery: FaStar,
-  bunker: FaBox,
-  tank: GiTank,
   factory: FaHammer,
 };
 

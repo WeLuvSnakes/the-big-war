@@ -141,7 +141,7 @@ export class ShipsLayer {
       return;
     }
     entry.label ??= shipLabel(entry.root);
-    const text = String(Math.ceil(ship.troops));
+    const text = String(ship.cargo.length);
     if (entry.label.text !== text) entry.label.text = text;
     entry.label.visible = true;
     entry.label.position.set(0, y);

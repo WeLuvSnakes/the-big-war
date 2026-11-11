@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { setTroops, testEmpire } from '../support/fixture';
+import { spawnUnits, testEmpire } from '../support/fixture';
 import type { Ship } from '@the-big-war/client/game/ship/ship.types';
 import type { HexCell } from '@the-big-war/client/game/map/map.types';
 import { isWater } from '@the-big-war/client/game/map/terrain.service';
@@ -10,16 +10,16 @@ import { dispatch } from '@the-big-war/client/game/commands/commands.service';
 import { step } from '@the-big-war/client/game/simulation/simulation.service';
 import { createBaseState } from '@the-big-war/client/game/state/state.service';
 import { findSeaRoute } from '@the-big-war/client/game/ship/sea-route.service';
-import { deployedTroops } from '@the-big-war/client/game/troops/troops.service';
 import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants';
 import { createInitialState } from '@the-big-war/client/game/state/setup.service';
 import { declareWar } from '@the-big-war/client/game/diplomacy/diplomacy.service';
 import { createBuilding } from '@the-big-war/client/game/building/building.service';
 import { FIXED_DT } from '@the-big-war/game-engine/simulation/simulation.constants';
+import { populationOf, unitStats } from '@the-big-war/client/game/unit/unit.service';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
 import { setBuilding, setOwner } from '@the-big-war/client/game/map/world-index.service';
 import { gridAt, gridIndex, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import { hasPort, isBlockaded, rebuildShipHash, shipsNear } from '@the-big-war/client/game/ship/ship.service';
+import { damageShip, hasPort, launchTransport, planLanding, isBlockaded, rebuildShipHash, shipsNear } from '@the-big-war/client/game/ship/ship.service';
 
 const WIDTH = 30;
 const HEIGHT = 12;
@@ -44,7 +44,6 @@ function seaState(): GameState {
   for (const cell of grid.cells) if (cell.q <= WEST_COAST) setOwner(state, cell, 0);
   for (const cell of grid.cells) if (cell.q >= EAST_COAST + 4) setOwner(state, cell, 1);
   for (const empire of state.empires) empire.hexCount = grid.cells.filter(cell => cell.owner === empire.id).length;
-  for (const empire of state.empires) setTroops(state, empire.id, empire.soldiers);
   return state;
 }
 
@@ -71,7 +70,7 @@ function battleship(state: GameState, empire: number, q: number, r: number): Shi
     path: [],
     pathAt: 0,
     cooldown: 0,
-    troops: 0,
+    cargo: [],
     beach: null,
     focus: null,
     destination: null,
@@ -82,7 +81,15 @@ function battleship(state: GameState, empire: number, q: number, r: number): Shi
   return ship;
 }
 
-const send = (state: GameState) => dispatch(state, { type: 'SendTroops', empire: 0, target: { q: 26, r: 5 }, percent: 50 });
+const send = (state: GameState) => {
+  const size = state.config.map.hexSize;
+  return dispatch(state, {
+    type: 'OrderUnits',
+    empire: 0,
+    units: spawnUnits(state, 0, { q: 2, r: 5 }, 2).map(unit => unit.id),
+    order: { kind: 'move', mode: 'amove', x: 26.5 * size, y: 5.5 * size, formation: 'wedge' },
+  });
+};
 
 const LAND_UNIT_COMMANDS: ReadonlySet<string> = new Set(['TrainUnit', 'OrderUnits']);
 
@@ -129,51 +136,83 @@ describe('sea routes', () => {
 });
 
 describe('transports', () => {
-  test('a port-less empire cannot launch', () => {
-    const state = seaState();
-    const result = send(state);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('no_port');
-    expect(state.ships.length).toBe(0);
-    expect(state.empires[0]!.soldiers).toBe(100);
-  });
-
-  test('landing takes the beach and starts an offensive; troops count as deployed', () => {
-    const state = seaState();
-    port(state, WEST_COAST, 5);
-    expect(send(state).ok).toBe(true);
-    expect(state.ships[0]!.kind).toBe('transport');
-    expect(deployedTroops(state, 0)).toBe(50);
-    for (let i = 0; i < 3000 && state.ships.length > 0; i++) step(state, FIXED_DT);
-    expect(state.ships.length).toBe(0);
-    run(state, 5);
-    expect(state.grid.cells.some(cell => cell.q >= EAST_COAST && cell.owner === 0)).toBe(true);
-  });
-
   test('boat limit per port', () => {
     const state = seaState();
     port(state, WEST_COAST, 5);
-    expect(send(state).ok).toBe(true);
-    expect(send(state).ok).toBe(true);
+    for (let boat = 0; boat < state.config.ship.boatsPerPort; boat++) {
+      const plan = planLanding(state, 0, { q: 26, r: 5 }, NEUTRAL_OWNER);
+      if (typeof plan === 'string') throw new Error(plan);
+      launchTransport(state, 0, plan, { q: 26, r: 5 });
+    }
     const result = send(state);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe('port_busy');
   });
 
-  test('a sunk transport loses its troops', () => {
+});
+
+describe('units at sea', () => {
+  const pixel = (state: GameState, q: number, r: number) => ({
+    x: (q + 0.5) * state.config.map.hexSize,
+    y: (r + 0.5) * state.config.map.hexSize,
+  });
+  const sail = (state: GameState, ids: readonly number[], q: number, r: number) =>
+    dispatch(state, {
+      type: 'OrderUnits',
+      empire: 0,
+      units: ids,
+      order: { kind: 'move', mode: 'amove', ...pixel(state, q, r), formation: 'wedge' },
+    });
+
+  test('an overseas order needs a port on their island', () => {
+    const state = seaState();
+    const units = spawnUnits(state, 0, { q: 2, r: 5 }, 3);
+    const result = sail(state, units.map(unit => unit.id), 26, 5);
+    expect(!result.ok && result.reason).toBe('no_port');
+    expect(units.every(unit => unit.boarding === null)).toBe(true);
+  });
+
+  test('units walk to the port, sail over and capture the far shore', () => {
     const state = seaState();
     port(state, WEST_COAST, 5);
-    send(state);
-    declareWar(state, 1, 0);
-    const ship = state.ships[0]!;
-    ship.hp = 10;
-    const hunter = battleship(state, 1, 8, 5);
-    run(state, 0.1);
-    expect(hunter.cooldown).toBeGreaterThan(0);
-    run(state, 12);
-    expect(state.ships.some(item => item.id === ship.id)).toBe(false);
-    expect(deployedTroops(state, 0)).toBe(0);
-    expect(state.empires[0]!.soldiers).toBeLessThan(100);
+    const units = spawnUnits(state, 0, { q: 2, r: 5 }, 3);
+    expect(sail(state, units.map(unit => unit.id), 25, 5).ok).toBe(true);
+    expect(units.every(unit => unit.boarding !== null)).toBe(true);
+
+    for (let i = 0; i < 6000 && state.ships.length === 0; i++) step(state, FIXED_DT);
+    expect(state.ships[0]!.cargo).toHaveLength(3);
+    expect(state.units).toHaveLength(0);
+    expect(populationOf(state, 0)).toBe(3 * unitStats('infantry').population);
+
+    for (let i = 0; i < 6000 && state.ships.length > 0; i++) step(state, FIXED_DT);
+    expect(state.units).toHaveLength(3);
+    run(state, 20);
+    expect(state.grid.cells.some(cell => cell.q >= EAST_COAST && cell.owner === 0)).toBe(true);
+  });
+
+  test('a new order before boarding cancels the voyage', () => {
+    const state = seaState();
+    port(state, WEST_COAST, 5);
+    const units = spawnUnits(state, 0, { q: 2, r: 5 }, 2);
+    const ids = units.map(unit => unit.id);
+    sail(state, ids, 25, 5);
+    dispatch(state, { type: 'OrderUnits', empire: 0, units: ids, order: { kind: 'hold' } });
+    expect(units.every(unit => unit.boarding === null)).toBe(true);
+    run(state, 30);
+    expect(state.ships).toHaveLength(0);
+  });
+
+  test('a sunk transport takes its units down with it', () => {
+    const state = seaState();
+    port(state, WEST_COAST, 5);
+    const units = spawnUnits(state, 0, { q: WEST_COAST, r: 5 }, 2);
+    sail(state, units.map(unit => unit.id), 25, 5);
+    for (let i = 0; i < 600 && state.ships.length === 0; i++) step(state, FIXED_DT);
+    damageShip(state.ships[0]!, state.ships[0]!.hp);
+    run(state, 1);
+    expect(state.ships).toHaveLength(0);
+    expect(state.units).toHaveLength(0);
+    expect(populationOf(state, 0)).toBe(0);
   });
 });
 
@@ -218,9 +257,10 @@ describe('battleships', () => {
     declareWar(state, 0, 1);
     const market = gridAt(state.grid, { q: 28, r: 5 })!;
     setBuilding(state, market, createBuilding(state, 'market', 1, 0));
+    const [defender] = spawnUnits(state, 1, market, 1, 'tank');
     battleship(state, 0, 22, 5);
     run(state, 12);
-    expect(state.empires[1]!.soldiers).toBeLessThan(100);
+    expect(defender!.hp).toBeLessThan(unitStats('tank').hp);
     expect(market.building).toBeNull();
   });
 
@@ -241,7 +281,7 @@ describe('battleships', () => {
     state.empires[0]!.isHuman = false;
     const home = port(state, 6, 5);
     for (const cell of state.grid.cells) if (cell.q === EAST_COAST) setOwner(state, cell, 1);
-    Object.assign(state.empires[0]!, { gold: 5000, science: 500, soldiers: 0 });
+    Object.assign(state.empires[0]!, { gold: 5000, science: 500,});
     const bot = createBot({ empire: 0, seed: 1 });
     for (let i = 0; i < 700 && !state.ships.some(ship => ship.kind === 'battleship' && ship.path.length > 0); i++) {
       for (const command of botTick(bot, state, 0.5)) if (!LAND_UNIT_COMMANDS.has(command.type)) dispatch(state, command);
@@ -339,9 +379,10 @@ describe('bots at sea', () => {
       step(state, FIXED_DT);
       since += FIXED_DT;
       if (since < state.config.bot.tickSeconds) continue;
+      const elapsed = since;
       since = 0;
       for (const bot of bots) {
-        for (const command of botTick(bot, state, since)) dispatch(state, command);
+        for (const command of botTick(bot, state, elapsed)) dispatch(state, command);
         if (hasPort(state, bot.empire)) ports.add(bot.empire);
       }
       landed ||= state.ships.some(ship => ship.kind === 'transport');

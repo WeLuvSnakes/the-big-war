@@ -109,9 +109,6 @@ export const SANDBAG_SHADE = 0x9c8a62;
 export const SANDBAG_OUTLINE = 0x5a4a32;
 export const WIRE_COLOR = 0x3a3a3e;
 export const STAKE_COLOR = 0x4a3a2a;
-export const HEDGEHOG_COLOR = 0x2e2e33;
-export const HEDGEHOG_HIGHLIGHT = 0x6a6a72;
-export const GUN_METAL_COLOR = 0x26262b;
 
 export const VOID_COLOR = 0x060a16;
 export const WORLD_BORDER_COLOR = 0xd4a83a;

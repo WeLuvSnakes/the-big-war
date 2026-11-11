@@ -133,7 +133,6 @@ export function createWorld(options: WorldOptions): WorldRenderer {
     ghost: null,
     spawnPlots: [],
     selectedShip: null,
-    focusedOffensive: null,
   };
 
   let lastState: GameState | null = null;
@@ -167,10 +166,9 @@ export function createWorld(options: WorldOptions): WorldRenderer {
     roads.draw(state.grid, state.index.roads, hexSize);
     fieldworks.draw(state.grid, state.index.buildings, hexSize, detailRange, overlayState.ghost);
     nationLabels.draw(state, hexSize);
-    buildings.draw(state.grid, state.index.buildings, hexSize, range, tilePx, state.elapsed, state.config.buildings, state.config.support.fortDefenceRadius);
+    buildings.draw(state.grid, state.index.buildings, hexSize, range, tilePx, state.elapsed, state.config.buildings);
     buildings.drawGhost(overlayState.ghost, hexSize);
-    const focused = overlayState.focusedOffensive === null ? undefined : state.offensives.find(o => o.id === overlayState.focusedOffensive);
-    overlay.draw(overlayState, hexSize, focused?.recent ?? [], performance.now());
+    overlay.draw(overlayState, hexSize);
     soldiers.draw(state, hexSize, range, tilePx);
     ships.draw(state, hexSize, cameraState.scale, range, overlayState.selectedShip);
     units.draw(state, unitsView, cameraState.scale, dtSeconds);
@@ -269,7 +267,6 @@ export function createWorld(options: WorldOptions): WorldRenderer {
       if (next.spawnPlots !== undefined) overlayState.spawnPlots = next.spawnPlots;
       if (next.ghost !== undefined) overlayState.ghost = next.ghost;
       if (next.selectedShip !== undefined) overlayState.selectedShip = next.selectedShip;
-      if (next.focusedOffensive !== undefined) overlayState.focusedOffensive = next.focusedOffensive;
     },
     setUnitsView(next: UnitsView): void {
       unitsView = next;

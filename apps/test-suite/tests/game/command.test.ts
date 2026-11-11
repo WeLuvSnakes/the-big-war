@@ -1,6 +1,5 @@
-import { testEmpire, clearStaging, setTroops } from '../support/fixture';
+import { testEmpire, clearStaging, spawnUnits } from '../support/fixture';
 import { labelWorld } from '@the-big-war/client/game/map/world-labels.service';
-import { garrisonedTroops } from '@the-big-war/client/game/trench/trench.service';
 import { createWorldIndex, setBuilding, setOwner } from '@the-big-war/client/game/map/world-index.service';
 
 
@@ -14,6 +13,7 @@ import type { GameConfig } from '@the-big-war/client/game/config/config.types';
 import type { HexCell, HexGrid } from '@the-big-war/client/game/map/map.types';
 import type { Command } from '@the-big-war/client/game/commands/commands.types';
 import { NEUTRAL_OWNER } from '@the-big-war/client/game/empire/empire.constants';
+import { declareWar } from '@the-big-war/client/game/diplomacy/diplomacy.service';
 import { completeResearch } from '@the-big-war/client/game/research/research.service';
 import { DEFAULT_GAME_CONFIG } from '@the-big-war/client/game/config/config.constants';
 import { gridAt, makeGrid } from '@the-big-war/game-engine/world-tile/world-tile.service';
@@ -43,7 +43,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
   }));
   const empires: Empire[] = [];
   for (let id = 0; id < config.start.empireCount; id++) {
-    empires.push(testEmpire({ id, factionId: FACTION_IDS[id % FACTION_IDS.length]!, gold: 1000, science: 1000, civilians: 100, soldiers: 100, reserveCap: 500 }));
+    empires.push(testEmpire({ id, factionId: FACTION_IDS[id % FACTION_IDS.length]!, gold: 1000, science: 1000, civilians: 100 }));
   }
   const state: GameState = {
     config,
@@ -52,7 +52,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
     grid,
     index: createWorldIndex(grid),
     empires,
-    offensives: [], walkers: [],
+    walkers: [],
     ships: [],
     nextShipId: 1,
     shipHash: new Map(),
@@ -62,7 +62,6 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
     production: [],
     unitEvents: [],
     nextUnitEventId: 1,
-    nextOffensiveId: 1,
     spawnSites: [],
     landHexCount: grid.cells.length,
     map: labelWorld(grid),
@@ -88,7 +87,7 @@ function makeState(config: GameConfig = tinyConfig()): GameState {
 }
 
 function makeBuilding(state: GameState, kind: BuildingKind, level = 1): Building {
-  return { id: state.nextBuildingId++, kind, level, cooldown: 0, growth: 0, demolishAt: null, buildRemaining: 0, gatherers: [], garrison: 0, machineGun: false, shipBuild: 0, shellDamage: 0 };
+  return { id: state.nextBuildingId++, kind, level, cooldown: 0, growth: 0, demolishAt: null, buildRemaining: 0, gatherers: [], shipBuild: 0, shellDamage: 0 };
 }
 
 function borderEdge(state: GameState, left: number, right: number): { a: { q: number; r: number }; b: { q: number; r: number } } {
@@ -227,8 +226,6 @@ describe('PlaceBuilding', () => {
 describe('PlaceBuilding field works', () => {
   const gated = [
     ['battery', 'heavy_artillery'],
-    ['bunker', 'reinforced_concrete'],
-    ['tank', 'armour'],
   ] as const;
 
   for (const [kind, nodeId] of gated) {
@@ -271,62 +268,46 @@ describe('Trenches', () => {
     return trench;
   }
 
-  test('machine guns must be mounted in a finished trench of your own', () => {
+  const centre = (state: GameState) => ({
+    x: (trenchHex.q + 0.5) * state.config.map.hexSize,
+    y: (trenchHex.r + 0.5) * state.config.map.hexSize,
+  });
+
+  test('infantry ordered onto your trench hold inside it, up to its capacity', () => {
     const state = makeState();
-    const locked = dispatch(state, { type: 'PlaceBuilding', empire: 0, hex: trenchHex, kind: 'machine_gun' });
-    expect(locked.ok).toBe(false);
-    if (!locked.ok) expect(locked.reason).toBe('not_researched');
+    dug(state);
+    const infantry = spawnUnits(state, 0, { q: 2, r: 2 }, 6);
+    const [tank] = spawnUnits(state, 0, { q: 2, r: 3 }, 1, 'tank');
+    const ids = [...infantry, tank!].map(unit => unit.id);
+    const result = dispatch(state, {
+      type: 'OrderUnits',
+      empire: 0,
+      units: ids,
+      order: { kind: 'move', mode: 'amove', ...centre(state), formation: 'wedge' },
+    });
+    expect(result.ok).toBe(true);
+    const size = state.config.map.hexSize;
+    const inside = state.units.filter(
+      unit => unit.mode === 'hold' && Math.floor(unit.tx / size) === trenchHex.q && Math.floor(unit.ty / size) === trenchHex.r,
+    );
+    expect(inside).toHaveLength(state.config.trench.capacity);
+    expect(inside.every(unit => unit.kind === 'infantry')).toBe(true);
+    expect(tank!.mode).toBe('amove');
+  });
 
-    state.empires[0]!.unlocks.push('building:machine_gun');
-    const open = dispatch(state, { type: 'PlaceBuilding', empire: 0, hex: { q: 3, r: 3 }, kind: 'machine_gun' });
-    expect(open.ok).toBe(false);
-
+  test('an unfinished or foreign trench is just a move target', () => {
+    const state = makeState();
     const trench = dug(state);
     trench.buildRemaining = 2;
-    const unfinished = dispatch(state, { type: 'PlaceBuilding', empire: 0, hex: trenchHex, kind: 'machine_gun' });
-    expect(unfinished.ok).toBe(false);
-
-    trench.buildRemaining = 0;
-    const mounted = dispatch(state, { type: 'PlaceBuilding', empire: 0, hex: trenchHex, kind: 'machine_gun' });
-    expect(mounted.ok).toBe(true);
-    expect(gridAt(state.grid, trenchHex)!.building).toBe(trench);
-    expect(trench.machineGun).toBe(true);
-
-    const twice = dispatch(state, { type: 'PlaceBuilding', empire: 0, hex: trenchHex, kind: 'machine_gun' });
-    expect(twice.ok).toBe(false);
+    const units = spawnUnits(state, 0, { q: 2, r: 2 }, 2);
+    dispatch(state, {
+      type: 'OrderUnits',
+      empire: 0,
+      units: units.map(unit => unit.id),
+      order: { kind: 'move', mode: 'amove', ...centre(state), formation: 'wedge' },
+    });
+    expect(units.every(unit => unit.mode === 'amove')).toBe(true);
   });
-
-  test('ManTrench moves reserve troops in up to capacity', () => {
-    const state = makeState();
-    setTroops(state, 0, 100);
-    const trench = dug(state);
-    const result = dispatch(state, { type: 'ManTrench', empire: 0, hex: trenchHex, percent: 100 });
-    expect(result.ok).toBe(true);
-    expect(trench.garrison).toBe(state.config.trench.capacity);
-    expect(state.empires[0]!.soldiers).toBe(100);
-
-    const full = dispatch(state, { type: 'ManTrench', empire: 0, hex: trenchHex, percent: 100 });
-    expect(full.ok).toBe(false);
-    if (!full.ok) expect(full.reason).toBe('trench_full');
-
-    const plain = dispatch(state, { type: 'ManTrench', empire: 0, hex: { q: 3, r: 4 }, percent: 50 });
-    expect(plain.ok).toBe(false);
-  });
-
-  test('LeaveTrench returns troops to the reserve', () => {
-    const state = makeState();
-    setTroops(state, 0, 100);
-    state.empires[0]!.bonuses.reserveCap.mul *= 2;
-    const trench = dug(state);
-    trench.garrison = 10;
-    state.empires[0]!.soldiers += 10;
-    const result = dispatch(state, { type: 'LeaveTrench', empire: 0, hex: trenchHex, percent: 100 });
-    expect(result.ok).toBe(true);
-    expect(trench.garrison).toBe(0);
-    expect(state.empires[0]!.soldiers).toBe(110);
-    expect(garrisonedTroops(state, 0)).toBe(110);
-  });
-
 });
 
 describe('DemolishBuilding', () => {
@@ -354,24 +335,22 @@ describe('DemolishBuilding', () => {
 });
 
 describe('FireCannon', () => {
-  test('fires within range, starts the cooldown, and shells enemy attacks near the target', () => {
+  test('fires within range, starts the cooldown, and shells enemy units near the target', () => {
     const state = makeState();
     clearStaging(state);
-    setTroops(state, 1, 100);
     const edge = borderEdge(state, 0, 1);
     const cannonHex = { q: edge.a.q - 1, r: edge.a.r };
     setBuilding(state, gridAt(state.grid, cannonHex)!, makeBuilding(state, 'cannon'));
-    dispatch(state, { type: 'SendTroops', empire: 1, target: edge.a, percent: 50 });
-    const offensive = state.offensives[0]!;
-    offensive.head = edge.b;
-    const before = offensive.troops;
+    declareWar(state, 0, 1);
+    const [enemy] = spawnUnits(state, 1, edge.b, 1);
+    const before = enemy!.hp;
     const goldBefore = state.empires[0]!.gold;
 
     const result = dispatch(state, { type: 'FireCannon', empire: 0, from: cannonHex, target: edge.b });
     expect(result.ok).toBe(true);
     expect(state.empires[0]!.gold).toBe(goldBefore - state.config.cannon.cost);
     expect(gridAt(state.grid, cannonHex)!.building!.cooldown).toBe(state.config.cannon.cooldown);
-    expect(offensive.troops).toBe(before - state.config.cannon.damage);
+    expect(enemy!.hp).toBe(before - state.config.cannon.damage);
   });
 
   test('rejects a target out of range', () => {
@@ -545,15 +524,10 @@ describe('speed, pause and log helpers', () => {
     
     emit({ type: 'SelectFaction', empire: 9, factionId: 'ironclad' });
     emit({ type: 'PlaceBuilding', empire: 0, hex: { q: 3, r: 2 }, kind: 'cannon' });
-    const edge = borderEdge(state, 0, 1);
-    setTroops(state, 0, 0);
-    emit({ type: 'SendTroops', empire: 0, target: edge.b, percent: 50 });
-    setTroops(state, 0, 100);
     state.empires[0]!.science = 0;
     emit({ type: 'StartResearch', empire: 0, nodeId: 'drill' });
     state.empires[0]!.gold = 0;
     emit({ type: 'PlaceBuilding', empire: 0, hex: { q: 3, r: 2 }, kind: 'market' });
-    emit({ type: 'RecallOffensive', empire: 0, offensive: 999 });
     
     expect(reasons.size).toBeGreaterThan(0);
   });

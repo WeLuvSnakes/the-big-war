@@ -1,25 +1,6 @@
 export const ENGINE_TUNING = {
-  frontAttackShare: 0.5,
-  frontDefenceShare: 0.5,
-  barracksAttackBonusPer: 0.08,
-  fortBonus: 0.5,
-  trenchDefenceBonus: 0.35,
-  machineGunDefenceBonus: 0.2,
-  bunkerDefenceBonus: 0.75,
-  bunkerShelling: 0.5,
-  tankAttackBonus: 0.6,
-  cityDefenceBonusPer: 0.15,
-  cityAttackBonusPer: 0.1,
   defaultTerrainDefence: 1.0,
-  workersPerBuilding: 1,
   civiliansPerBuild: 0,
   buildSlotsPerEmpire: 1,
   progressEpsilon: 1e-9,
-
-  mountainClaimSeconds: 4,
-
-  waveFocusPull: 1.5,
-  waveJitter: 4,
-  waveRecentTiles: 8,
-  defenceRadius: 2,
 } as const;

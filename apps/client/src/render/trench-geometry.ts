@@ -39,7 +39,7 @@ export function trenchShape(grid: AxialGrid<HexCell>, cell: HexCell, planned: Ax
   return { links, facing, key };
 }
 
-export function trenchFront(shape: TrenchShape): Pixel {
+function trenchFront(shape: TrenchShape): Pixel {
   if (shape.facing) return shape.facing;
   const first = shape.links[0];
   if (first) return first.x !== 0 ? { x: 0, y: -1 } : { x: 1, y: 0 };
@@ -93,11 +93,3 @@ export function trenchSamples(shape: TrenchShape, hexSize: number, spacing: numb
   return out;
 }
 
-export function trenchSlots(shape: TrenchShape, hexSize: number, count: number): Pixel[] {
-  if (count <= 0) return [];
-  const points = trenchSamples(shape, hexSize, hexSize * 0.05);
-  if (points.length === 0) return [];
-  const slots: Pixel[] = [];
-  for (let i = 0; i < count; i++) slots.push(points[Math.floor(((i + 0.5) / count) * points.length)]!.at);
-  return slots;
-}

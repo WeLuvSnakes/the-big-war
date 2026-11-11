@@ -1,6 +1,5 @@
 import type { ShipId } from '../game/ship/ship.types';
 import type { BuildingKind } from '../game/building/building.types';
-import type { OffensiveId } from '../game/offensive/offensive.types';
 import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 
 export interface PlacementGhost {
@@ -33,5 +32,4 @@ export interface OverlayState {
 
   selectedShip: ShipId | null;
 
-  focusedOffensive: OffensiveId | null;
 }

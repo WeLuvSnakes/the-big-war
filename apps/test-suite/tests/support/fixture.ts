@@ -1,13 +1,12 @@
+import { createUnit } from '@the-big-war/client/game/unit/unit.service';
 import type { Empire } from '@the-big-war/client/game/empire/empire.types';
 import type { GameState } from '@the-big-war/client/game/state/state.types';
 import { setBuilding } from '@the-big-war/client/game/map/world-index.service';
-import type { Building } from '@the-big-war/client/game/building/building.types';
-import { encampmentCapacity } from '@the-big-war/client/game/troops/troops.service';
+import type { Unit, UnitKind } from '@the-big-war/client/game/unit/unit.types';
+import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { emptyModifierTotals } from '@the-big-war/client/game/modifier/modifier.service';
-import { buildingCellsOf, ownedCells } from '@the-big-war/client/game/map/world-index.service';
-import { createBuilding, isEncampment } from '@the-big-war/client/game/building/building.service';
 
-const STAGING_KINDS: readonly string[] = ['city', 'barracks', 'fort'];
+const STAGING_KINDS: readonly string[] = ['city', 'barracks'];
 
 export function testEmpire(fields: Partial<Empire> & { readonly id: number }): Empire {
   return {
@@ -22,10 +21,6 @@ export function testEmpire(fields: Partial<Empire> & { readonly id: number }): E
     scienceBalance: 0,
     civilians: 100,
     civilianBalance: 0,
-    troopBalance: 0,
-    soldiers: 100,
-    reserveCap: 500,
-    drafting: false,
     bonuses: emptyModifierTotals(),
     research: { completed: [], chosen: {}, active: null },
     unlocks: [],
@@ -42,22 +37,11 @@ export function clearStaging(state: GameState): void {
   }
 }
 
-export function setTroops(state: GameState, empire: number, troops: number): void {
-  for (const cell of buildingCellsOf(state, empire)) if (cell.building) cell.building.garrison = 0;
-  const owner = state.empires[empire]!;
-  const home = stagingCamp(state, empire);
-  const room = home ? encampmentCapacity(state, empire, home) / owner.bonuses.reserveCap.mul : 1;
-  owner.bonuses = { ...owner.bonuses, reserveCap: { add: 0, mul: Math.max(owner.bonuses.reserveCap.mul, troops / room) } };
-  if (home) home.garrison = troops;
-  state.empires[empire]!.soldiers = home ? troops : 0;
-}
-
-function stagingCamp(state: GameState, empire: number): Building | null {
-  const held = buildingCellsOf(state, empire).find(cell => cell.building && isEncampment(cell.building.kind));
-  if (held) return held.building;
-  const site = [...ownedCells(state, empire)].find(cell => !cell.building);
-  if (!site) return null;
-  const fort = createBuilding(state, 'fort', 1, 0);
-  setBuilding(state, site, fort);
-  return fort;
+export function spawnUnits(state: GameState, empire: number, hex: Axial, count: number, kind: UnitKind = 'infantry'): Unit[] {
+  const size = state.config.map.hexSize;
+  return Array.from({ length: count }, () => {
+    const unit = createUnit(state, kind, empire, (hex.q + 0.5) * size, (hex.r + 0.5) * size);
+    state.units.push(unit);
+    return unit;
+  });
 }

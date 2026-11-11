@@ -1,60 +1,13 @@
+import type { Bot } from './bot.types';
 import { BOT_TUNING } from './bot.constants';
-import type { Bot, HostileEdge } from './bot.types';
-import { attackGroups } from './bot-defence.service';
 import { finishedPorts } from '../ship/ship.service';
 import type { Empire } from '../empire/empire.types';
+import { hostileWaters } from './bot-queries.service';
 import type { GameState } from '../state/state.types';
 import { hasUnlock } from '../research/research.service';
 import type { Command } from '../commands/commands.types';
-import { clamp } from '@the-big-war/game-engine/math/math.service';
-import { troopsCommittedAgainst } from '../offensive/offensive.service';
-import { chance, nextInt } from '@the-big-war/game-engine/rng/rng.service';
-import { distance, gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
-import { effectiveAggression, hasFreeBoat, hostileEdges, hostileWaters, overseasTarget } from './bot-queries.service';
-
-export function troopCommand(bot: Bot, state: GameState, empire: Empire): Command | null {
-  const edges = hostileEdges(state, bot.empire);
-
-  const aggression = effectiveAggression(bot, state);
-  const floor = empire.reserveCap * BOT_TUNING.reserveFloorRatio;
-  const surplusShare = aggression >= 0.85 ? 1 : aggression >= 0.5 ? 0.7 : 0.4;
-  const spendable = empire.soldiers - floor;
-  if (spendable < 1) return null;
-
-  const send = Math.floor(spendable * surplusShare);
-  const percent = clamp(Math.ceil((send / empire.soldiers) * 100), 1, 100);
-  if (edges.length === 0) return landingCommand(bot, state, empire, send, percent);
-
-  let weakest: HostileEdge[] = [];
-  let bestDefence = Infinity;
-  for (const edge of edges) {
-    const defence = troopsCommittedAgainst(state, edge.defender, bot.empire);
-    if (defence < bestDefence) {
-      bestDefence = defence;
-      weakest = [];
-    }
-    if (defence === bestDefence) weakest.push(edge);
-  }
-  const best = weakest[nextInt(bot.rng, weakest.length)]!;
-  const localTroops = troopsCommittedAgainst(state, bot.empire, best.defender);
-  const ratio = (localTroops + empire.soldiers) / Math.max(bestDefence, 1);
-  if (ratio < BOT_TUNING.attackSuperiority && aggression < 0.85) return null;
-  const groups = attackGroups(state, bot.empire);
-  if (groups.length < BOT_TUNING.maxAttackGroups) {
-    return { type: 'SendTroops', empire: bot.empire, target: best.target, percent };
-  }
-  if (!chance(bot.rng, BOT_TUNING.reorderChance)) return null;
-  const group = groups.reduce((a, b) => (distance(b.focus, best.target) < distance(a.focus, best.target) ? b : a));
-  if (distance(group.focus, best.target) === 0) return null;
-  return { type: 'OrderOffensive', empire: bot.empire, offensive: group.id, target: best.target };
-}
-
-function landingCommand(bot: Bot, state: GameState, empire: Empire, send: number, percent: number): Command | null {
-  const needed = Math.max(BOT_TUNING.minLandingTroops, empire.reserveCap * BOT_TUNING.landingReserveShare);
-  if (send < needed || !hasFreeBoat(state, bot.empire)) return null;
-  const target = overseasTarget(state, bot.empire);
-  return target ? { type: 'SendTroops', empire: bot.empire, target, percent } : null;
-}
+import { chance } from '@the-big-war/game-engine/rng/rng.service';
+import { gridIndex } from '@the-big-war/game-engine/world-tile/world-tile.service';
 
 export function fleetCommands(bot: Bot, state: GameState, empire: Empire): Command[] {
   const commands: Command[] = [];

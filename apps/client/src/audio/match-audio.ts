@@ -7,15 +7,6 @@ import { pendingOffersTo } from '../game/diplomacy/diplomacy.service';
 
 const SAMPLE_SECONDS = 0.1;
 const WAR_HOLD_SECONDS = 8;
-const RIFLE_MIN_SECONDS = 0.15;
-const RIFLE_SPREAD_SECONDS = 1.1;
-const MAX_RIFLE_FRONTS = 3;
-
-const playerTroops = (state: GameState): number => {
-  let troops = 0;
-  for (const offensive of state.offensives) if (offensive.empire === state.playerEmpire) troops += offensive.troops;
-  return troops;
-};
 
 export function snapshotMatch(state: GameState): MatchSnapshot {
   const player = state.playerEmpire;
@@ -34,8 +25,8 @@ export function snapshotMatch(state: GameState): MatchSnapshot {
     hexes: empire?.hexCount ?? 0,
     research: empire?.research.completed.length ?? 0,
     offers: pendingOffersTo(state, player).length,
-    playerFronts: state.offensives.filter(item => item.empire === player || item.target === player).length,
-    frontTroops: playerTroops(state),
+    playerFronts: state.units.filter(unit => unit.empire === player && unit.target !== null).length,
+    frontTroops: state.units.filter(unit => unit.empire === player).length,
     aliveEmpires: state.empires.filter(item => item.alive).length,
     cooldowns,
     ownBuildings,
@@ -75,24 +66,13 @@ export function diffSounds(previous: MatchSnapshot, next: MatchSnapshot): readon
 export function createMatchAudio(store: ClientStore) {
   let previous = snapshotMatch(store.state);
   let sampleIn = SAMPLE_SECONDS;
-  let rifleIn = 0;
   let warHold = 0;
 
   return {
     update(dt: number): void {
       if (store.status() !== 'playing' || store.paused()) return;
 
-      if (previous.playerFronts > 0) {
-        warHold = WAR_HOLD_SECONDS;
-        rifleIn -= dt;
-        if (rifleIn <= 0) {
-          audio.play('rifle');
-          const crowding = Math.min(previous.playerFronts, MAX_RIFLE_FRONTS);
-          rifleIn = RIFLE_MIN_SECONDS + (Math.random() * RIFLE_SPREAD_SECONDS) / crowding;
-        }
-      } else {
-        warHold = Math.max(0, warHold - dt);
-      }
+      warHold = previous.playerFronts > 0 ? WAR_HOLD_SECONDS : Math.max(0, warHold - dt);
       audio.setMood(warHold > 0 ? 'war' : 'peace');
 
       sampleIn -= dt;

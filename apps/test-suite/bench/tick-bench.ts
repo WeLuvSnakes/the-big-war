@@ -52,7 +52,7 @@ function run({ width, height, empires }: BenchCase): void {
       `tick mean ${mean.toFixed(2)}ms p50 ${percentile(samples, 0.5).toFixed(2)}ms ` +
       `p95 ${percentile(samples, 0.95).toFixed(2)}ms max ${samples[samples.length - 1]!.toFixed(2)}ms, ` +
       `${load.toFixed(0)}% of a core at 4x, ` +
-      `${store.state.offensives.length} offensives`,
+      `${store.state.units.length} units`,
   );
 }
 

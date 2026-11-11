@@ -8,7 +8,7 @@ import { signed, signedPercent } from '@the-big-war/frontend/ui/format/format';
 import type { Modifier, ModifierKey } from '../../game/modifier/modifier.types';
 import type { ResearchBranch, ResearchEffect, ResearchNode } from '../../game/research/research.types';
 import { RESEARCH_BRANCHES, branchLabel, researchNodes, researchSecondsLeft, researchStatus } from './ResearchPanel.utility';
-import { FaArrowUp, FaBolt, FaChevronRight, FaCheck, FaCrosshairs, FaFlag, FaHammer, FaHeart, FaAtom, FaShieldAlt, FaUnlock, FaUsers, FaVial, FaWallet } from '@the-big-war/frontend/ui/icons/icons';
+import { FaArrowUp, FaBolt, FaChevronRight, FaCheck, FaCrosshairs, FaHammer, FaHeart, FaAtom, FaShieldAlt, FaUnlock, FaVial, FaWallet } from '@the-big-war/frontend/ui/icons/icons';
 
 export type { ResearchPanelProps };
 
@@ -19,10 +19,7 @@ const MODIFIER_META: Record<ModifierKey, { readonly icon: typeof FaWallet; reado
   buildCost: { icon: FaHammer, label: 'Build cost' },
   attack: { icon: FaCrosshairs, label: 'Attack' },
   defence: { icon: FaShieldAlt, label: 'Defence' },
-  reserveCap: { icon: FaUsers, label: 'Reserve cap' },
-  recruitSpeed: { icon: FaBolt, label: 'Recruit speed' },
-  frontAttack: { icon: FaFlag, label: 'Wave attack' },
-  frontDefence: { icon: FaShieldAlt, label: 'Wave defence' },
+  trainSpeed: { icon: FaBolt, label: 'Training speed' },
 };
 
 function modifierValue(modifier: Modifier): string {

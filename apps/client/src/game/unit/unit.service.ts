@@ -5,7 +5,8 @@ import type { EmpireId } from '../empire/empire.types';
 import { buildingCellsOf } from '../map/world-index.service';
 import { nextFloat } from '@the-big-war/game-engine/rng/rng.service';
 import { FORMATION_RANK, UNIT_STATS, UNIT_TUNING } from './unit.constants';
-import { gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
+import type { Axial } from '@the-big-war/game-engine/world-tile/world-tile.types';
+import { distance, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import type { Formation, Unit, UnitEvent, UnitId, UnitKind, UnitMode, UnitOrder, UnitStats } from './unit.types';
 
 export function unitStats(kind: UnitKind): UnitStats {
@@ -38,6 +39,7 @@ export function createUnit(state: GameState, kind: UnitKind, empire: EmpireId, x
     suppression: 0,
     captureAt: -1,
     capture: 0,
+    boarding: null,
   };
 }
 
@@ -69,6 +71,10 @@ export function isCover(cell: HexCell | undefined): boolean {
 export function populationOf(state: GameState, empire: EmpireId): number {
   let total = 0;
   for (const unit of state.units) if (unit.empire === empire) total += unitStats(unit.kind).population;
+  for (const ship of state.ships) {
+    if (ship.empire !== empire) continue;
+    for (const unit of ship.cargo) total += unitStats(unit.kind).population;
+  }
   for (const line of state.production) {
     if (line.empire !== empire) continue;
     for (const kind of line.queue) total += unitStats(kind).population;
@@ -185,6 +191,19 @@ export function applyOrder(state: GameState, units: readonly Unit[], order: Unit
     unit.tx = unit.x;
     unit.ty = unit.y;
   }
+}
+
+export function shellUnits(state: GameState, shooter: EmpireId, at: Axial, radius: number, damage: number): number {
+  const size = state.config.map.hexSize;
+  let hits = 0;
+  for (const unit of state.units) {
+    if (unit.hp <= 0 || !hostileUnits(state, shooter, unit.empire)) continue;
+    const hex = { q: Math.floor(unit.x / size), r: Math.floor(unit.y / size) };
+    if (distance(hex, at) > radius) continue;
+    unit.hp -= weaponDamage(unitStats(unit.kind), 0, damage);
+    hits += 1;
+  }
+  return hits;
 }
 
 export function weaponDamage(target: UnitStats, penetration: number, amount: number): number {

@@ -40,8 +40,7 @@ const MODIFIER_LABELS: Readonly<Record<string, string>> = {
   buildCost: 'build cost',
   growth: 'growth',
   scienceRate: 'science',
-  frontDefence: 'wave defence',
-  reserveCap: 'reserve cap',
+  trainSpeed: 'training speed',
 };
 
 export function difficultyLabel(difficulty: Difficulty): string {

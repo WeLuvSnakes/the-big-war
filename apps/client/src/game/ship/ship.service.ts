@@ -51,12 +51,6 @@ export function atWar(state: GameState, a: EmpireId, b: EmpireId): boolean {
   return a !== b && getRelation(state, a, b).status === 'war';
 }
 
-export function troopsAtSea(state: GameState, empire: EmpireId): number {
-  let total = 0;
-  for (const ship of state.ships) if (ship.empire === empire) total += ship.troops;
-  return total;
-}
-
 export function isFinishedPort(cell: HexCell): boolean {
   const building = cell.building;
   return building?.kind === 'port' && building.buildRemaining <= 0 && building.demolishAt === null;
@@ -120,8 +114,16 @@ function beachChoice(state: GameState, focus: Axial, wanted: EmpireId, bodies: R
   return best;
 }
 
-export function planLanding(state: GameState, empire: EmpireId, focus: Axial, wanted: EmpireId): LandingPlan | CommandError {
-  const ports = finishedPorts(state, empire);
+export function planLanding(
+  state: GameState,
+  empire: EmpireId,
+  focus: Axial,
+  wanted: EmpireId,
+  landmass?: number,
+): LandingPlan | CommandError {
+  const ports = finishedPorts(state, empire).filter(
+    port => landmass === undefined || state.map.landmass[gridIndex(state.grid, port.q, port.r)] === landmass,
+  );
   if (ports.length === 0) return 'no_port';
   const bodies = new Set(ports.map(port => portWaterBody(state.grid, state.map, port)));
   const coast = beachChoice(state, focus, wanted, bodies);
@@ -156,7 +158,7 @@ function spawnShip(state: GameState, kind: ShipKind, empire: EmpireId, port: Bui
     path: path.slice(1),
     pathAt: 0,
     cooldown: 0,
-    troops: 0,
+    cargo: [],
     beach: null,
     focus: null,
     destination: null,
@@ -167,10 +169,9 @@ function spawnShip(state: GameState, kind: ShipKind, empire: EmpireId, port: Bui
   return ship;
 }
 
-export function launchTransport(state: GameState, empire: EmpireId, plan: LandingPlan, focus: Axial, troops: number): Ship {
+export function launchTransport(state: GameState, empire: EmpireId, plan: LandingPlan, focus: Axial): Ship {
   const building = gridAt(state.grid, plan.port)!.building!;
   const ship = spawnShip(state, 'transport', empire, building, plan.route);
-  ship.troops = troops;
   ship.beach = gridCoord(state.grid, plan.coast.beach);
   ship.focus = { q: focus.q, r: focus.r };
   return ship;
@@ -205,7 +206,7 @@ export function damageShip(ship: Ship, damage: number): void {
   ship.hp -= damage;
   if (ship.hp > 0) return;
   ship.hp = 0;
-  ship.troops = 0;
+  ship.cargo = [];
 }
 
 export function shellShips(state: GameState, shooter: EmpireId, at: Axial, radius: number, damage: number): number {

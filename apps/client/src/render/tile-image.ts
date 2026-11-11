@@ -26,7 +26,7 @@ export const CHUNK_SIZE = 1 << CHUNK_SHIFT;
 
 const SWEEP_ROWS = 4;
 const TERRAIN_CODES: Readonly<Record<string, number>> = { plain: 0, forest: 1, mountain: 2, ore: 3, water: 4 };
-const UNPAVED: ReadonlySet<BuildingKind> = new Set<BuildingKind>(['trench', 'tank']);
+const UNPAVED: ReadonlySet<BuildingKind> = new Set<BuildingKind>(['trench']);
 
 export function isPaved(cell: HexCell | undefined): boolean {
   return !!cell?.building && !UNPAVED.has(cell.building.kind);

@@ -4,13 +4,10 @@ import type { HexCell } from '../game/map/map.types';
 import type { PlacementGhost } from './overlay-layer.types';
 import type { BuildingId } from '../game/building/building.types';
 import type { TrenchSample, TrenchShape } from './trench-geometry';
-import { trenchFront, trenchPaths, trenchSamples, trenchShape } from './trench-geometry';
+import { trenchPaths, trenchSamples, trenchShape } from './trench-geometry';
 import type { AxialGrid, Pixel } from '@the-big-war/game-engine/world-tile/world-tile.types';
 import { axialToPixel, gridAt } from '@the-big-war/game-engine/world-tile/world-tile.service';
 import {
-  GUN_METAL_COLOR,
-  HEDGEHOG_COLOR,
-  HEDGEHOG_HIGHLIGHT,
   SANDBAG_COLOR,
   SANDBAG_OUTLINE,
   SANDBAG_SHADE,
@@ -32,7 +29,6 @@ const BAG_SPACING = 0.1;
 const BAG_OFFSET = 0.16;
 const WIRE_OFFSET = 0.36;
 const STAKE_SPACING = 0.25;
-const HEDGEHOG_SIZE = 0.1;
 
 interface FieldworkEntry {
   readonly object: Graphics;
@@ -67,17 +63,16 @@ export class FieldworksLayer {
       for (const at of buildings) {
         const cell = grid.cells[at];
         const building = cell?.building;
-        if (!cell || !building || (building.kind !== 'trench' && building.kind !== 'bunker')) continue;
+        if (!cell || !building || building.kind !== 'trench') continue;
         if (cell.q < range.minQ || cell.q > range.maxQ || cell.r < range.minR || cell.r > range.maxR) continue;
         seen.add(building.id);
-        const shape = building.kind === 'trench' ? trenchShape(grid, cell, planned) : null;
-        const key = `${building.kind},${hexSize},${shape?.key ?? ''},${building.machineGun},${building.buildRemaining > 0}`;
+        const shape = trenchShape(grid, cell, planned);
+        const key = `${hexSize},${shape.key},${building.buildRemaining > 0}`;
         const entry = this.acquire(building.id);
         if (entry.key !== key) {
           entry.key = key;
           entry.object.clear();
-          if (shape) drawTrench(entry.object, shape, hexSize, building.machineGun);
-          else if (building.buildRemaining <= 0) drawHedgehogs(entry.object, cell, hexSize);
+          drawTrench(entry.object, shape, hexSize);
         }
         const center = axialToPixel(cell, hexSize);
         entry.object.position.set(center.x, center.y);
@@ -104,7 +99,7 @@ export class FieldworksLayer {
     if (key !== this.ghostKey) {
       this.ghostKey = key;
       this.ghost.clear();
-      drawTrench(this.ghost, shape, hexSize, false);
+      drawTrench(this.ghost, shape, hexSize);
     }
     this.ghost.alpha = ghost.valid ? GHOST_ALPHA : INVALID_GHOST_ALPHA;
     this.ghost.tint = ghost.valid ? 0xffffff : INVALID_GHOST_TINT;
@@ -135,7 +130,7 @@ export class FieldworksLayer {
   }
 }
 
-function drawTrench(g: Graphics, shape: TrenchShape, hexSize: number, machineGun: boolean): void {
+function drawTrench(g: Graphics, shape: TrenchShape, hexSize: number): void {
   const paths = trenchPaths(shape, hexSize);
   const lone = shape.links.length === 0;
   const cap = lone ? 'round' : 'butt';
@@ -150,7 +145,6 @@ function drawTrench(g: Graphics, shape: TrenchShape, hexSize: number, machineGun
   sandbags(g, bags, hexSize, -BAG_OFFSET, 0.8);
 
   if (shape.facing) barbedWire(g, trenchSamples(shape, hexSize, hexSize * STAKE_SPACING), hexSize);
-  if (machineGun) machineGunNest(g, hexSize, trenchFront(shape));
 }
 
 function polyline(
@@ -221,55 +215,3 @@ function barbedWire(g: Graphics, samples: readonly TrenchSample[], hexSize: numb
   g.stroke({ width: Math.max(0.5, hexSize * 0.01), color: WIRE_COLOR, alpha: 0.9 });
 }
 
-function machineGunNest(g: Graphics, hexSize: number, front: Pixel): void {
-  const ring = hexSize * 0.17;
-  const bag = hexSize * 0.05;
-  for (let i = 0; i < 10; i++) {
-    const angle = (i / 10) * Math.PI * 2;
-    const x = Math.cos(angle) * ring;
-    const y = Math.sin(angle) * ring;
-    if (x * -front.x + y * -front.y > ring * 0.7) continue;
-    g.ellipse(x, y, bag, bag * 0.75);
-    g.fill({ color: SANDBAG_COLOR });
-    g.stroke({ width: Math.max(0.6, hexSize * 0.012), color: SANDBAG_OUTLINE });
-  }
-  g.moveTo(0, 0);
-  g.lineTo(front.x * hexSize * 0.3, front.y * hexSize * 0.3);
-  g.stroke({ width: Math.max(1.2, hexSize * 0.04), color: GUN_METAL_COLOR, cap: 'round' });
-  g.rect(-hexSize * 0.05, -hexSize * 0.04, hexSize * 0.1, hexSize * 0.08);
-  g.fill({ color: GUN_METAL_COLOR });
-}
-
-function drawHedgehogs(g: Graphics, cell: HexCell, hexSize: number): void {
-  const seed = Math.abs((cell.q * 73856093) ^ (cell.r * 19349663));
-  const corners = [
-    { x: -0.4, y: -0.4 },
-    { x: 0.4, y: -0.4 },
-    { x: 0.4, y: 0.4 },
-    { x: -0.4, y: 0.4 },
-  ];
-  for (let i = 0; i < 3; i++) {
-    const corner = corners[(seed + i) % corners.length]!;
-    hedgehog(g, corner.x * hexSize, corner.y * hexSize, hexSize * HEDGEHOG_SIZE);
-  }
-}
-
-function hedgehog(g: Graphics, x: number, y: number, size: number): void {
-  g.ellipse(x, y + size * 0.7, size * 1.1, size * 0.3);
-  g.fill({ color: 0x000000, alpha: 0.25 });
-  const beams: [number, number, number, number][] = [
-    [-size, -size, size, size],
-    [size, -size, -size, size],
-    [-size * 1.1, size * 0.2, size * 1.1, -size * 0.2],
-  ];
-  for (const [ax, ay, bx, by] of beams) {
-    g.moveTo(x + ax, y + ay);
-    g.lineTo(x + bx, y + by);
-  }
-  g.stroke({ width: Math.max(1.2, size * 0.35), color: HEDGEHOG_COLOR, cap: 'square' });
-  for (const [ax, ay, bx, by] of beams) {
-    g.moveTo(x + ax, y + ay - size * 0.08);
-    g.lineTo(x + bx, y + by - size * 0.08);
-  }
-  g.stroke({ width: Math.max(0.5, size * 0.1), color: HEDGEHOG_HIGHLIGHT });
-}

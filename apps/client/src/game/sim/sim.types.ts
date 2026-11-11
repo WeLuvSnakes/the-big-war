@@ -3,13 +3,11 @@ import type { Empire } from '../empire/empire.types';
 import type { ClientStore } from '../store/store.types';
 import type { GameConfig } from '../config/config.types';
 import type { Walker } from '../building/building.types';
-import type { Offensive } from '../offensive/offensive.types';
 import type { GameState, EndReason } from '../state/state.types';
 import type { Command, CommandResult } from '../commands/commands.types';
 import type { ProductionQueue, Unit, UnitEvent } from '../unit/unit.types';
 import type { MatchStatus } from '@the-big-war/game-engine/simulation/simulation.types';
 
-export type OffensiveView = Omit<Offensive, 'frontier' | 'queued'>;
 export type WalkerView = Omit<Walker, 'path'>;
 
 export type ShipView = Omit<Ship, 'path'> & { path?: number[] };
@@ -28,7 +26,6 @@ export interface FrameMessage {
   readonly landHexCount: number;
   readonly spawnSites: GameState['spawnSites'];
   readonly agentAccumulator: number;
-  readonly nextOffensiveId: number;
   readonly nextShipId: number;
   readonly nextBuildingId: number;
   readonly nextUnitId: number;
@@ -40,7 +37,6 @@ export interface FrameMessage {
   readonly buildings: Float64Array<ArrayBuffer>;
   readonly gatherers: Float64Array<ArrayBuffer>;
   readonly empires: readonly Empire[];
-  readonly offensives: readonly OffensiveView[];
   readonly walkers: readonly WalkerView[];
   readonly ships: readonly ShipView[];
   readonly relations: GameState['relations'];

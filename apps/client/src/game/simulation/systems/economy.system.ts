@@ -1,16 +1,9 @@
 import type { GameState } from '../../state/state.types';
-import type { EmpireId } from '../../empire/empire.types';
 import { refillUnlimited } from '../../empire/empire.service';
 import { populationWeight } from '../../map/world-index.service';
 import type { OwnedBuilding } from '../../building/building.types';
 import { resolveModifier } from '@the-big-war/game-engine/modifier/modifier.service';
 import { isProductionBuilding, ownedBuildings } from '../../building/building.service';
-
-const civilianGrowthRate: number[] = [];
-
-export function civilianGrowthRateOf(empireId: EmpireId): number {
-  return civilianGrowthRate[empireId] ?? 0;
-}
 
 export function stepEconomy(state: GameState, dt: number): void {
   const econ = state.config.economy;
@@ -20,7 +13,6 @@ export function stepEconomy(state: GameState, dt: number): void {
       empire.goldBalance = 0;
       empire.scienceBalance = 0;
       empire.civilianBalance = 0;
-      civilianGrowthRate[empire.id] = 0;
       continue;
     }
     const owned = ownedBuildings(state, empire.id);
@@ -80,7 +72,8 @@ export function stepEconomy(state: GameState, dt: number): void {
       farmGrowth += econ.farmGrowthPerFarm * (1 + building.growth);
     }
     const growth = resolveModifier(passive + cityGrowth + farmGrowth * staffing, empire.bonuses.growth);
-    civilianGrowthRate[empire.id] = growth;
+    empire.civilians = Math.max(0, empire.civilians + growth * dt);
+    empire.civilianBalance = growth;
   }
 }
 
